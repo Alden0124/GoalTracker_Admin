@@ -11,7 +11,7 @@ const options = {
     servers: [
       {
         url: process.env.NODE_ENV === 'production' 
-          ? 'https://你的render域名/api'
+          ? 'https://https://goaltracker-admin.onrender.com/api'
           : 'http://localhost:3001/api',
         description: process.env.NODE_ENV === 'production' 
           ? '生產環境 API' 

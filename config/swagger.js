@@ -10,11 +10,11 @@ const options = {
     },
     servers: [
       {
-        url: process.env.NODE_ENV === 'production' 
-          ? 'https://https://goaltracker-admin.onrender.com/api'
+        url: process.env.NODE_ENV === 'production'
+          ? 'https://goaltracker-admin.onrender.com/api'
           : 'http://localhost:3001/api',
-        description: process.env.NODE_ENV === 'production' 
-          ? '生產環境 API' 
+        description: process.env.NODE_ENV === 'production'
+          ? '生產環境 API'
           : '開發環境 API',
       },
     ],

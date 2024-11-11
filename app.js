@@ -18,16 +18,32 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 添加 CORS 配置
+// CORS 配置
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://你的前端域名'] 
-    : ['http://localhost:3000'],
-  credentials: true
+  origin: process.env.NODE_ENV === 'production'
+    ? [
+        'https://goaltracker-admin.onrender.com',  // 後端域名
+        'https://goaltracker-web.onrender.com/'  // 如果有前端應用
+      ]
+    : ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // 安全性配置
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,  // 為了 Swagger UI
+  crossOriginEmbedderPolicy: false
+}));
+
+// 添加額外的 CORS 頭
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
+});
 
 // 基本配置
 app.use(logger("dev"));
@@ -39,8 +55,15 @@ app.use(cookieParser());
 app.use("/api", indexRouter);
 app.use("/api/users", usersRouter);
 
-// Swagger 文檔
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+// Swagger UI 配置
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  swaggerOptions: {
+    url: '/api-docs/swagger.json',
+    persistAuthorization: true
+  }
+}));
 
 // 錯誤處理
 app.use(function (req, res, next) {

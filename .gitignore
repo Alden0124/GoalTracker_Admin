@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+!.env.example
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Debug Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+*.swp
+*.swo
+
+# Build
+/dist
+/build
+
+# Temp files
+*.log
+*.tmp
+*.temp
+
+# Coverage
+/coverage
+
+# Cache
+.cache/
+.npm/
+
+# 但保留示例文件
+!.env.example
+
+# System Files
+.DS_Store
+
+# Debug Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+
+# Build
+/dist
+/build
+
+# Temp files
+*.log
+*.tmp

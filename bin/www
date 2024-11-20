@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 使用單一的 .env 文件
+const envPath = path.resolve(__dirname, '..', '.env');
+console.log('正在載入環境變數文件:', envPath);
+
+// 載入環境變數
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error('環境變數載入失敗:', result.error);
+  process.exit(1);
+}
+
+// 驗證環境變數
+console.log('環境變數載入狀態：', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT
+});
+
+// 驗證關鍵環境變量
+console.log('環境變量驗證:', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
+  MONGODB_URI: !!process.env.MONGODB_URI,
+  EMAIL_USER: !!process.env.EMAIL_USER,
+  EMAIL_APP_PASSWORD: !!process.env.EMAIL_APP_PASSWORD
+});
+
+import app, { initializeApp } from "../app.js";
+import debug from "debug";
+import http from "http";
+
+const debugLog = debug("goaltracker:server");
+
+let server;
+
+async function startServer() {
+  try {
+    await initializeApp();
+    
+    const port = normalizePort(process.env.PORT || "3001");
+    app.set("port", port);
+
+    server = http.createServer(app);
+    
+    server.listen(port);
+    server.on("error", onError);
+    server.on("listening", onListening);
+
+    console.log(`Server is running on port ${port}`);
+  } catch (error) {
+    console.error('服務器啟動失敗:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    return val;
+  }
+
+  if (port >= 0) {
+    return port;
+  }
+
+  return false;
+}
+
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  var bind =
+    typeof port === "string"
+      ? "Pipe " + port
+      : "Port " + port;
+
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " 需要提升權限");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(bind + " 已被占用");
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+function onListening() {
+  const addr = server.address();
+  const bind = typeof addr === "string"
+    ? "pipe " + addr
+    : "port " + addr.port;
+  debugLog("正在監聽 " + bind);
+}

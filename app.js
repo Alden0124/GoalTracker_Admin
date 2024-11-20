@@ -107,18 +107,20 @@ app.use((req, res) => {
 
 // 錯誤處理
 app.use((err, req, res, next) => {
-  console.error('錯誤:', err);
+  console.error('错误详情:', {
+    message: err.message,
+    stack: err.stack,
+    status: err.status
+  });
   
   const status = err.status || 500;
-  const message = process.env.NODE_ENV === 'production' 
-    ? '服務器錯誤' 
-    : err.message;
+  const message = err.message || '服务器错误';
 
   res.status(status).json({
     error: {
       message,
       status,
-      ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+      timestamp: new Date().toISOString()
     },
   });
 });

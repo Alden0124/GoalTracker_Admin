@@ -1,5 +1,3 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import { sendVerificationEmail } from "../config/nodemailer.js";
 import {

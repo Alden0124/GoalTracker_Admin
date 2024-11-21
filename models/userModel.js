@@ -7,6 +7,16 @@ const providerTokenSchema = new mongoose.Schema({
   userId: String
 }, { _id: false });
 
+const sessionSchema = new mongoose.Schema({
+  refreshToken: String,
+  deviceInfo: String,
+  lastUsed: {
+    type: Date,
+    default: Date.now
+  },
+  expiresAt: Date
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -65,7 +75,11 @@ const userSchema = new mongoose.Schema({
       default: () => ({})
     }
   },
-  lastSyncAt: Date
+  lastSyncAt: Date,
+  sessions: {
+    type: [sessionSchema],
+    default: []
+  }
 }, {
   timestamps: true
 });

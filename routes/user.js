@@ -14,7 +14,7 @@ const router = express.Router();
 // 1. 用戶資料的讀取和更新
 // 2. 用戶頭像管理
 // 3. 用戶資料同步
-router.get("/current", verifyAuth, getCurrentUser);             // 獲取當前用戶資料
+router.get("/Profile", verifyAuth, getCurrentUser);             // 獲取當前用戶資料
 router.put("/:userId/avatar", verifyAuth, upload.single("avatar"), updateAvatar);              // 更新用戶頭像
 router.get("/sync", verifyAuth, syncProfile);                   // 同步用戶資料
 

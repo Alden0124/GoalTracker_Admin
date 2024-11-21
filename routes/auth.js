@@ -3,11 +3,14 @@ import { upload } from "../config/cloudinary.js";
 import {
   signUp,
   signIn,
+  signOut,
   signInWithProvider,
   googleSignIn,
   lineSignIn,
-  refreshToken
+  refreshToken,
+  getActiveSessions
 } from "../controllers/authController.js";
+import { verifyAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -22,5 +25,7 @@ router.post("/signin/provider", signInWithProvider);            // 通用第三�
 router.post("/signin/google", googleSignIn);                    // Google 登入
 router.post("/signin/line", lineSignIn);                        // Line 登入
 router.post("/refresh-token", refreshToken);                    // 更新訪問令牌
+router.post("/signout", signOut);                              // 登出
+router.get("/sessions", verifyAuth, getActiveSessions);        // 獲取登入裝置列表
 
 export default router; 

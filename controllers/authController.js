@@ -114,9 +114,26 @@ const signIn = async (req, res) => {
       return res.status(400).json({ message: "請提供電子郵件和密碼" });
     }
 
+    // 檢查是否是第三方登入的 email
+    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
+    if (isThirdPartyEmail) {
+      return res.status(403).json({ 
+        message: "此信箱已使用第三方服務登入，請使用對應的第三方服務登入",
+        isThirdPartyEmail: true
+      });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ message: "此信箱尚未註冊，或信箱輸入錯誤" });
+    }
+
+    // 檢查是否為第三方登入用戶
+    if (user.isThirdPartyUser()) {
+      return res.status(403).json({ 
+        message: "此帳號使用第三方服務登入，請使用對應的第三方服務登入",
+        isThirdPartyUser: true
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -144,10 +161,11 @@ const signIn = async (req, res) => {
         email: user.email,
         avatar: user.avatar,
         isEmailVerified: user.isEmailVerified,
-      },
+        providers: user.providers
+      }
     });
   } catch (error) {
-    console.error("登入錯誤:");
+    console.error("登入錯誤:", error);
     res.status(500).json({ message: "伺服器錯誤" });
   }
 };
@@ -164,7 +182,7 @@ const lineSignIn = async (req, res) => {
     const tokenResponse = await axios.post('https://api.line.me/oauth2/v2.1/token', 
       new URLSearchParams({
         grant_type: 'authorization_code',
-        code,
+        code: code,
         redirect_uri: process.env.LINE_REDIRECT_URI,
         client_id: process.env.LINE_CHANNEL_ID,
         client_secret: process.env.LINE_CHANNEL_SECRET
@@ -178,15 +196,16 @@ const lineSignIn = async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
-    // 獲取用戶信息
-    const userResponse = await axios.get('https://api.line.me/v2/profile', {
+    // 獲取用戶資料
+    const profileResponse = await axios.get('https://api.line.me/v2/profile', {
       headers: {
         Authorization: `Bearer ${access_token}`
       }
     });
 
-    const { userId: lineUserId, displayName, pictureUrl } = userResponse.data;
+    const { userId: lineUserId, displayName, pictureUrl } = profileResponse.data;
 
+    // 查找或創建用戶
     let user = await User.findOne({
       'providerTokens.line.userId': lineUserId
     });
@@ -205,32 +224,23 @@ const lineSignIn = async (req, res) => {
         avatar: pictureUrl,
         providers: ['line'],
         providerTokens: {
-          line: lineTokenData,
-          google: {}
+          line: lineTokenData
         }
       });
     } else {
-      // 更新現有用戶
-      if (!user.providers.includes('line')) {
-        user.providers.push('line');
-      }
-      
-      const existingProviderTokens = user.providerTokens || {};
-      user.providerTokens = {
-        ...existingProviderTokens,
-        line: lineTokenData
-      };
-
-      if (!user.avatar && pictureUrl) {
-        user.avatar = pictureUrl;
-      }
+      // 更新現有用戶的 token
+      user.providerTokens.line = lineTokenData;
     }
 
-    // 使用輔助函數處理 session
+    await user.save();
+
+    // 處理 session
     const refreshToken = await updateUserSession(user, req);
     
+    // 設置 cookie
     res.cookie('refreshToken', refreshToken, getCookieConfig(req));
 
+    // 生成 access token
     const accessToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
@@ -238,17 +248,20 @@ const lineSignIn = async (req, res) => {
     );
 
     res.json({
-      message: 'LINE 登入成功',
+      message: "登入成功",
       accessToken,
       user: {
         id: user._id,
         username: user.username,
+        email: user.email,
         avatar: user.avatar,
+        isEmailVerified: user.isEmailVerified,
         providers: user.providers
       }
     });
+
   } catch (error) {
-    console.error('LINE 登入錯誤:', error.data);
+    console.error('LINE 登入錯誤:', error);
     res.status(500).json({ message: '登入失敗，請稍後再試' });
   }
 };
@@ -300,16 +313,26 @@ const refreshToken = async (req, res) => {
 const googleSignIn = async (req, res) => {
   try {
     const { token } = req.body;
-    const payload = await verifyGoogleToken(token);
     
+    if (!token) {
+      return res.status(400).json({ message: 'Google Token 不能為空' });
+    }
+
+    const payload = await verifyGoogleToken(token);
     if (!payload) {
       return res.status(401).json({ message: 'Google 驗證失敗' });
     }
 
+    // 只通過 Google ID 或 email 查找 Google 登入的用戶
     let user = await User.findOne({
-      $or: [
-        { email: payload.email },
-        { 'providerTokens.google.userId': payload.sub }
+      $and: [
+        { 
+          $or: [
+            { 'providerTokens.google.userId': payload.sub },
+            { email: payload.email }
+          ]
+        },
+        { providers: 'google' } // 確保只查找 Google 登入的用戶
       ]
     });
 
@@ -320,7 +343,7 @@ const googleSignIn = async (req, res) => {
     };
 
     if (!user) {
-      // 創建新用戶
+      // 創建新的 Google 用戶
       user = new User({
         username: payload.name,
         email: payload.email,
@@ -328,30 +351,18 @@ const googleSignIn = async (req, res) => {
         isEmailVerified: true,
         providers: ['google'],
         providerTokens: {
-          google: googleTokenData,
-          line: {}
+          google: googleTokenData
         }
       });
     } else {
-      // 更新現有用戶
-      if (!user.providers.includes('google')) {
-        user.providers.push('google');
-      }
-      
-      const existingProviderTokens = user.providerTokens || {};
-      user.providerTokens = {
-        ...existingProviderTokens,
-        google: googleTokenData
-      };
-
-      if (!user.avatar && payload.picture) {
-        user.avatar = payload.picture;
-      }
+      // 更新現有 Google 用戶的資訊
+      user.providerTokens.google = googleTokenData;
+      user.isEmailVerified = true;
     }
 
-    // 使用輔助函數處理 session
+    await user.save();
+    // 處理 session 和 token
     const refreshToken = await updateUserSession(user, req);
-    
     res.cookie('refreshToken', refreshToken, getCookieConfig(req));
 
     const accessToken = jwt.sign(
@@ -527,6 +538,52 @@ const getActiveSessions = async (req, res) => {
   } catch (error) {
     console.error('獲取登入裝置錯誤:', error);
     res.status(500).json({ message: '獲取登入裝置時發生錯誤' });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "此信箱尚未註冊" });
+    }
+
+    if (user.isThirdPartyUser()) {
+      return res.status(403).json({ 
+        message: "第三方登入用戶不能使用密碼重置功能，請使用對應的第三方服務重置密碼",
+        isThirdPartyUser: true
+      });
+    }
+
+    // ... 其餘代碼保持不變 ...
+  } catch (error) {
+    console.error("忘記密碼錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "用戶不存在" });
+    }
+
+    if (user.isThirdPartyUser()) {
+      return res.status(403).json({ 
+        message: "第三方登入用戶不能重置密碼，請使用對應的第三方服務重置密碼",
+        isThirdPartyUser: true
+      });
+    }
+
+    // ... 其餘代碼保持不變 ...
+  } catch (error) {
+    console.error("重置密碼錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
   }
 };
 

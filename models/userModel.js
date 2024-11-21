@@ -26,9 +26,7 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: function() {
-      return !this.providers || !this.providers.includes('line');
-    },
+    required: false,
     unique: true,
     sparse: true,
     trim: true,
@@ -55,7 +53,9 @@ const userSchema = new mongoose.Schema({
   },
   isEmailVerified: {
     type: Boolean,
-    default: false
+    default: function() {
+      return this.providers ? this.providers.includes('google') : false;
+    }
   },
   avatar: {
     type: String,
@@ -68,11 +68,11 @@ const userSchema = new mongoose.Schema({
   providerTokens: {
     google: {
       type: providerTokenSchema,
-      default: () => ({})
+      required: false
     },
     line: {
       type: providerTokenSchema,
-      default: () => ({})
+      required: false
     }
   },
   lastSyncAt: Date,
@@ -85,23 +85,46 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre('save', function(next) {
-  if (!this.providerTokens) {
-    this.providerTokens = {
-      google: {},
-      line: {}
-    };
+  if (this.providers && this.providers.length > 0) {
+    this.providers.forEach(provider => {
+      if (!this.providerTokens[provider]) {
+        this.providerTokens[provider] = {};
+      }
+    });
   }
-  
-  if (!this.providerTokens.google) {
-    this.providerTokens.google = {};
-  }
-  
-  if (!this.providerTokens.line) {
-    this.providerTokens.line = {};
-  }
-  
   next();
 });
+
+userSchema.methods.hasProvider = function(provider) {
+  return this.providers.includes(provider) && 
+         this.providerTokens[provider] && 
+         this.providerTokens[provider].userId;
+};
+
+userSchema.methods.canResetPassword = function() {
+  return !this.providers || this.providers.length === 0;
+};
+
+userSchema.methods.needsEmailVerification = function() {
+  return !this.isEmailVerified && (!this.providers || !this.providers.includes('google'));
+};
+
+userSchema.methods.isThirdPartyUser = function() {
+  return this.providers && this.providers.length > 0;
+};
+
+userSchema.statics.isThirdPartyEmail = async function(email) {
+  const user = await this.findOne({ email });
+  return user ? user.isThirdPartyUser() : false;
+};
+
+userSchema.methods.needsEmail = function() {
+  return !this.email && this.providers.includes('line');
+};
+
+userSchema.methods.needsEmailForOperation = function() {
+  return !this.email || !this.isEmailVerified;
+};
 
 const User = mongoose.model("User", userSchema);
 

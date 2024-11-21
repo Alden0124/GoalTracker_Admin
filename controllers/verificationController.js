@@ -6,25 +6,49 @@ export const sendVerificationCode = async (req, res) => {
   try {
     const { email } = req.body;
     
-    // 先檢查用戶是否已經驗證過郵箱
-    const existingUser = await User.findOne({ email });
-    if (existingUser && existingUser.isEmailVerified) {
-      return res.status(400).json({ message: "此郵箱已驗證過" });
+    // 檢查 email 是否已被第三方登入使用
+    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
+    if (isThirdPartyEmail) {
+      return res.status(403).json({ 
+        message: "此信箱已被第三方登入使用，無需驗證",
+        isThirdPartyEmail: true
+      });
     }
 
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const existingUser = await User.findOne({ email });
+    if (existingUser && existingUser.isThirdPartyUser()) {
+      return res.status(403).json({ 
+        message: "第三方登入用戶無需驗證郵箱",
+        isThirdPartyUser: true
+      });
+    }
+
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await User.findOneAndUpdate(
-      { email },
-      {
+    let user = existingUser;
+    
+    if (!user) {
+      // 如果用戶不存在，創建新用戶
+      user = new User({
+        email,
+        providers: [],
         verificationCode: {
           code: verificationCode,
-          expiresAt,
-        },
-      },
-      { upsert: true }
-    );
+          expiresAt
+        }
+      });
+    } else {
+      // 如果用戶存在，更新驗證碼
+      user.verificationCode = {
+        code: verificationCode,
+        expiresAt
+      };
+    }
+
+    await user.save();
 
     const isEmailSent = await sendVerificationEmail(email, verificationCode);
 
@@ -42,8 +66,18 @@ export const sendVerificationCode = async (req, res) => {
 export const verifyCode = async (req, res) => {
   try {
     const { email, code } = req.body;
-
     const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: "用戶不存在" });
+    }
+
+    if (user.isThirdPartyUser()) {
+      return res.status(403).json({ 
+        message: "第三方登入用戶無需驗證郵箱",
+        isThirdPartyUser: true
+      });
+    }
 
     if (!user || !user.verificationCode) {
       return res.status(400).json({ message: "驗證碼無效" });
@@ -82,9 +116,25 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     
+    // 檢查 email 是否已被第三方登入使用
+    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
+    if (isThirdPartyEmail) {
+      return res.status(403).json({ 
+        message: "此信箱已被第三方登入使用，請使用對應的第三方服務重置密碼",
+        isThirdPartyEmail: true
+      });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: "找不到該郵箱對應的用戶" });
+    }
+
+    // 檢查是否為第三方登入用戶
+    if (user.provider && user.provider !== 'local') {
+      return res.status(400).json({ 
+        message: "此帳號使用第三方登入，無法使用重置密碼功能" 
+      });
     }
 
     // 生成重置密碼的驗證碼
@@ -120,6 +170,15 @@ export const resetPassword = async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
     
+    // 檢查 email 是否已被第三方登入使用
+    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
+    if (isThirdPartyEmail) {
+      return res.status(403).json({ 
+        message: "此信箱已被第三方登入使用，請使用對應的第三方服務重置密碼",
+        isThirdPartyEmail: true
+      });
+    }
+
     const user = await User.findOne({ email });
     if (!user || !user.resetPasswordCode) {
       return res.status(400).json({ message: "重置密碼驗證碼無效" });

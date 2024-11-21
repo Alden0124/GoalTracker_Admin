@@ -258,3 +258,42 @@ export const syncProfile = async (req, res) => {
     res.status(500).json({ message: "伺服器錯誤" });
   }
 };
+
+export const addEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findById(req.user.userId);
+
+    // 檢查 email 是否已被使用
+    const existingUser = await User.findOne({ email });
+    if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+      return res.status(400).json({ message: "此電子郵件已被使用" });
+    }
+
+    // 生成驗證碼
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.email = email;
+    user.verificationCode = {
+      code: verificationCode,
+      expiresAt
+    };
+    user.isEmailVerified = false;
+    await user.save();
+
+    // 發送驗證郵件
+    const isEmailSent = await sendVerificationEmail(email, verificationCode);
+    if (!isEmailSent) {
+      return res.status(500).json({ message: "驗證碼發送失敗" });
+    }
+
+    res.json({ 
+      message: "驗證碼已發送到您的郵箱",
+      email: email
+    });
+  } catch (error) {
+    console.error("添加 email 錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};

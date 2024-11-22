@@ -119,10 +119,25 @@ const signIn = async (req, res) => {
 
     const user = await User.findOne({ email });
     
+    // 如果用戶不存在
     if (!user) {
       return res.status(401).json({ 
         message: "此信箱尚未註冊",
         notRegistered: true
+      });
+    }
+
+    // 檢查是否為第三方登入用戶
+    if (user.providers && user.providers.some(provider => ['google', 'line'].includes(provider))) {
+      const providerNames = user.providers
+        .filter(p => ['google', 'line'].includes(p))
+        .map(p => p === 'line' ? 'LINE' : 'Google')
+        .join('或');
+      
+      return res.status(403).json({ 
+        message: `此信箱使用${providerNames}登入，請使用對應的第三方服務登入`,
+        isThirdPartyUser: true,
+        providers: user.providers
       });
     }
 

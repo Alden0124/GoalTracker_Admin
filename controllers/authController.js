@@ -11,12 +11,11 @@ import { getLineUserInfo } from '../config/lineAuth.js';
 const getCookieConfig = (req) => {
   const isProduction = process.env.NODE_ENV === "production";
   return {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    domain: isProduction ? "goaltracker-web.onrender.com" : "localhost",
-    path: "/",
+    httpOnly: true, // 只能在 HTTP 請求中使用，防止客戶端腳本訪問
+    secure: isProduction, // 僅在 HTTPS 中傳遞
+    sameSite: isProduction ? "none" : "lax", // 設置 SameSite 屬性
+    maxAge: 7 * 24 * 60 * 60 * 1000, // Cookie 有效期（毫秒）
+    path: "/", // Cookie 有效路徑
   };
 };
 

@@ -37,16 +37,6 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie']
 }));
 
-// 添加額外的 CORS 標頭
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
-  next();
-});
-
 // 安全性配置
 app.use(helmet({
   contentSecurityPolicy: {
@@ -155,4 +145,3 @@ const initializeApp = async () => {
 // 導出 initializeApp 供 bin/www 使用
 export { initializeApp };
 export default app;
-

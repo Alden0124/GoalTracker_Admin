@@ -6,23 +6,45 @@ export const sendVerificationCode = async (req, res) => {
   try {
     const { email } = req.body;
     
-    // 檢查 email 是否已被第三方登入使用
-    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
-    if (isThirdPartyEmail) {
+    // 先檢查用戶是否存在
+    const existingUser = await User.findOne({ email });
+    
+    // 如果用戶不存在，直接發送驗證碼
+    if (!existingUser) {
+      const verificationCode = Math.floor(
+        100000 + Math.random() * 900000
+      ).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      // 創建新的臨時用戶
+      const user = new User({
+        email,
+        providers: [],
+        verificationCode: {
+          code: verificationCode,
+          expiresAt
+        }
+      });
+
+      await user.save();
+      const isEmailSent = await sendVerificationEmail(email, verificationCode);
+
+      if (!isEmailSent) {
+        return res.status(500).json({ message: "驗證碼發送失敗" });
+      }
+
+      return res.json({ message: "驗證碼已發送到您的郵箱" });
+    }
+
+    // 如果用戶存在，檢查是否為第三方登入用戶
+    if (existingUser.providers.some(provider => ['google', 'line'].includes(provider))) {
       return res.status(403).json({ 
         message: "此信箱已被第三方登入使用，無需驗證",
         isThirdPartyEmail: true
       });
     }
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser && existingUser.isThirdPartyUser()) {
-      return res.status(403).json({ 
-        message: "第三方登入用戶無需驗證郵箱",
-        isThirdPartyUser: true
-      });
-    }
-
+    // 更新現有用戶的驗證碼
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();

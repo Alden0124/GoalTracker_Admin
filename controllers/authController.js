@@ -5,6 +5,7 @@ import User from "../models/userModel.js";
 import { handleUploadError } from "../utils/cloudinaryHelper.js";
 import { verifyGoogleToken } from "../config/googleAuth.js";
 import axios from "axios";
+import { getLineUserInfo } from '../config/lineAuth.js';
 
 // Cookie 配置函數
 const getCookieConfig = (req) => {
@@ -64,45 +65,47 @@ const updateUserSession = async (user, req) => {
 const signUp = async (req, res) => {
   try {
     const { username, email, password } = req.body;
-
-    const existingUser = await User.findOne({
-      $or: [{ email }, ...(username ? [{ username }] : [])],
-    });
-
-    if (existingUser) {
-      await handleUploadError(req.file);
-      return res.status(400).json({
-        message: username ? "用戶名或電子郵件已被使用" : "電子郵件已被使用",
+    
+    // 檢查必要欄位
+    if (!email || !password || !username) {
+      return res.status(400).json({ 
+        message: "請提供完整的註冊資訊",
+        missingFields: {
+          email: !email,
+          password: !password,
+          username: !username
+        }
       });
     }
 
+    // 加密密碼
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // 創建新用戶
     const user = new User({
-      ...(username && { username }),
+      username,
       email,
-      password: hashedPassword,
-      avatar: req.file ? req.file.path : "",
-      isEmailVerified: false,
+      password: hashedPassword,  // 存儲加密後的密碼
+      providers: ['local']
     });
 
     await user.save();
 
     res.status(201).json({
-      message: "註冊成功，請驗證您的郵箱",
+      message: "註冊成功",
       user: {
         id: user._id,
         username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-        isEmailVerified: false,
-      },
+        email: user.email
+      }
     });
   } catch (error) {
-    await handleUploadError(req.file);
     console.error("註冊錯誤:", error);
-    res.status(500).json({ message: "註冊時發生錯誤" });
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "此電子郵件已被註冊" });
+    }
+    res.status(500).json({ message: "註冊失敗，請稍後再試" });
   }
 };
 
@@ -114,38 +117,34 @@ const signIn = async (req, res) => {
       return res.status(400).json({ message: "請提供電子郵件和密碼" });
     }
 
-    // 檢查是否是第三方登入的 email
-    const isThirdPartyEmail = await User.isThirdPartyEmail(email);
-    if (isThirdPartyEmail) {
-      return res.status(403).json({ 
-        message: "此信箱已使用第三方服務登入，請使用對應的第三方服務登入",
-        isThirdPartyEmail: true
-      });
-    }
-
     const user = await User.findOne({ email });
+    
     if (!user) {
-      return res.status(401).json({ message: "此信箱尚未註冊，或信箱輸入錯誤" });
+      return res.status(401).json({ 
+        message: "此信箱尚未註冊",
+        notRegistered: true
+      });
     }
 
-    // 檢查是否為第三方登入用戶
-    if (user.isThirdPartyUser()) {
-      return res.status(403).json({ 
-        message: "此帳號使用第三方服務登入，請使用對應的第三方服務登入",
-        isThirdPartyUser: true
-      });
+    // 檢查密碼是否存在
+    if (!user.password) {
+      console.error('用戶密碼不存在:', user._id);
+      return res.status(401).json({ message: "帳號或密碼錯誤" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
+    
     if (!isMatch) {
       return res.status(401).json({ message: "密碼錯誤" });
     }
 
-    // 使用輔助函數處理 session
+    // 處理 session
     const refreshToken = await updateUserSession(user, req);
     
+    // 設置 cookie
     res.cookie('refreshToken', refreshToken, getCookieConfig(req));
 
+    // 生成 access token
     const accessToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
@@ -166,56 +165,42 @@ const signIn = async (req, res) => {
     });
   } catch (error) {
     console.error("登入錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
+    res.status(500).json({ message: "登入失敗，請稍後再試" });
   }
 };
 
 const lineSignIn = async (req, res) => {
   try {
     const { code } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ message: 'LINE 授權碼不能為空' });
-    }
+    const lineUserInfo = await getLineUserInfo(code);
+    const { sub: lineUserId, name: displayName, picture: pictureUrl } = lineUserInfo;
 
-    // 獲取 LINE access token
-    const tokenResponse = await axios.post('https://api.line.me/oauth2/v2.1/token', 
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: process.env.LINE_REDIRECT_URI,
-        client_id: process.env.LINE_CHANNEL_ID,
-        client_secret: process.env.LINE_CHANNEL_SECRET
-      }).toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-
-    const { access_token, refresh_token, expires_in } = tokenResponse.data;
-
-    // 獲取用戶資料
-    const profileResponse = await axios.get('https://api.line.me/v2/profile', {
-      headers: {
-        Authorization: `Bearer ${access_token}`
-      }
+    console.log('LINE 用戶資訊:', {
+      lineUserId,
+      displayName,
+      hasAvatar: !!pictureUrl
     });
 
-    const { userId: lineUserId, displayName, pictureUrl } = profileResponse.data;
-
-    // 查找或創建用戶
+    // 查找用戶的多種可能性
     let user = await User.findOne({
-      'providerTokens.line.userId': lineUserId
+      $or: [
+        { 'providerTokens.line.userId': lineUserId },
+        { 
+          providers: 'line',
+          'providerTokens.line': { 
+            $exists: true, 
+            $ne: null 
+          }
+        }
+      ]
     });
 
-    const lineTokenData = {
-      userId: lineUserId,
-      accessToken: access_token,
-      refreshToken: refresh_token,
-      expiresAt: new Date(Date.now() + expires_in * 1000)
-    };
+    console.log('查找到的用戶:', user ? {
+      id: user._id,
+      username: user.username,
+      providers: user.providers,
+      lineUserId: user.providerTokens?.line?.userId
+    } : '未找到用戶');
 
     if (!user) {
       // 創建新用戶
@@ -224,12 +209,41 @@ const lineSignIn = async (req, res) => {
         avatar: pictureUrl,
         providers: ['line'],
         providerTokens: {
-          line: lineTokenData
+          line: {
+            userId: lineUserId,
+            accessToken: lineUserInfo.accessToken,
+            refreshToken: lineUserInfo.refreshToken,
+            expiresIn: lineUserInfo.expiresIn,
+            expiresAt: new Date(Date.now() + lineUserInfo.expiresIn * 1000)
+          }
         }
       });
+
+      console.log('創建新用戶:', {
+        username: user.username,
+        lineUserId: user.providerTokens.line.userId
+      });
     } else {
-      // 更新現有用戶的 token
-      user.providerTokens.line = lineTokenData;
+      // 更新現有用戶
+      user.providerTokens.line = {
+        userId: lineUserId,
+        accessToken: lineUserInfo.accessToken,
+        refreshToken: lineUserInfo.refreshToken,
+        expiresIn: lineUserInfo.expiresIn,
+        expiresAt: new Date(Date.now() + lineUserInfo.expiresIn * 1000)
+      };
+      
+      // 更新用戶資料
+      if (!user.providers.includes('line')) {
+        user.providers.push('line');
+      }
+      user.username = displayName;
+      user.avatar = pictureUrl;
+
+      console.log('更新現有用戶:', {
+        username: user.username,
+        lineUserId: user.providerTokens.line.userId
+      });
     }
 
     await user.save();
@@ -263,6 +277,23 @@ const lineSignIn = async (req, res) => {
   } catch (error) {
     console.error('LINE 登入錯誤:', error);
     res.status(500).json({ message: '登入失敗，請稍後再試' });
+  }
+};
+
+// 新增一個輔助函數來生成唯一的 username
+const generateUniqueUsername = async (baseName) => {
+  let username = baseName;
+  let counter = 1;
+  
+  while (true) {
+    // 檢查當前 username 是否已存在
+    const existingUser = await User.findOne({ username });
+    if (!existingUser) {
+      return username;
+    }
+    // 如果已存在，添加數字後綴
+    username = `${baseName}${counter}`;
+    counter++;
   }
 };
 
@@ -332,7 +363,7 @@ const googleSignIn = async (req, res) => {
             { email: payload.email }
           ]
         },
-        { providers: 'google' } // 確保只查找 Google 登入的用戶
+        { providers: 'google' } // 確保查找 Google 登入的用戶
       ]
     });
 

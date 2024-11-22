@@ -20,8 +20,7 @@ const __dirname = path.dirname(__filename);
 // CORS 配置
 const allowedOrigins = [
   'http://localhost:10000',
-  'https://goaltracker-web.onrender.com',
-  'https://goaltracker-admin.onrender.com'
+  'https://goaltracker-web.onrender.com'
 ];
 
 app.use(cors({
@@ -34,8 +33,19 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
 }));
+
+// 添加額外的 CORS 標頭
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  next();
+});
 
 // 安全性配置
 app.use(helmet({
@@ -43,7 +53,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      connectSrc: ["'self'", ...allowedOrigins],
+      connectSrc: ["'self'", "https://goaltracker-web.onrender.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
     },

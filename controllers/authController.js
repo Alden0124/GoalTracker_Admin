@@ -6,6 +6,7 @@ import { handleUploadError } from "../utils/cloudinaryHelper.js";
 import { verifyGoogleToken } from "../config/googleAuth.js";
 import axios from "axios";
 import { getLineUserInfo } from '../config/lineAuth.js';
+import { getMessage } from '../utils/i18n.js';
 
 // Cookie 配置函數
 const getCookieConfig = (req) => {
@@ -65,11 +66,12 @@ const updateUserSession = async (user, req) => {
 const signUp = async (req, res) => {
   try {
     const { username, email, password } = req.body;
+    const lang = req.headers['accept-language']?.split(',')[0] || 'zh-TW';
     
     // 檢查必要欄位
     if (!email || !password || !username) {
       return res.status(400).json({ 
-        message: "請提供完整的註冊資訊",
+        message: getMessage('auth.missingFields', lang),
         missingFields: {
           email: !email,
           password: !password,
@@ -86,14 +88,14 @@ const signUp = async (req, res) => {
     const user = new User({
       username,
       email,
-      password: hashedPassword,  // 存儲加密後的密碼
+      password: hashedPassword,
       providers: ['local']
     });
 
     await user.save();
 
     res.status(201).json({
-      message: "註冊成功",
+      message: getMessage('auth.signupSuccess', lang),
       user: {
         id: user._id,
         username: user.username,
@@ -103,39 +105,49 @@ const signUp = async (req, res) => {
   } catch (error) {
     console.error("註冊錯誤:", error);
     if (error.code === 11000) {
-      return res.status(400).json({ message: "此電子郵件已被註冊" });
+      return res.status(400).json({ 
+        message: getMessage('auth.emailRegistered', lang)
+      });
     }
-    res.status(500).json({ message: "註冊失敗，請稍後再試" });
+    res.status(500).json({ 
+      message: getMessage('auth.signupFailed', lang)
+    });
   }
 };
 
 const signIn = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const lang = req.headers['accept-language']?.split(',')[0] || 'zh-TW';
 
+    // 檢查必要欄位
     if (!email || !password) {
-      return res.status(400).json({ message: "請提供電子郵件和密碼" });
+      return res.status(400).json({ 
+        message: getMessage('auth.missingCredentials', lang)
+      });
     }
 
     const user = await User.findOne({ email });
     
-    // 如果用戶不存在
+    // 檢查用戶是否存在
     if (!user) {
       return res.status(401).json({ 
-        message: "此信箱尚未註冊",
+        message: getMessage('auth.emailNotRegistered', lang),
         notRegistered: true
       });
     }
 
     // 檢查是否為第三方登入用戶
-    if (user.providers && user.providers.some(provider => ['google', 'line'].includes(provider))) {
+    if (user.providers?.some(provider => ['google', 'line'].includes(provider))) {
       const providerNames = user.providers
         .filter(p => ['google', 'line'].includes(p))
         .map(p => p === 'line' ? 'LINE' : 'Google')
         .join('或');
       
       return res.status(403).json({ 
-        message: `此信箱使用${providerNames}登入，請使用對應的第三方服務登入`,
+        message: getMessage('auth.thirdPartyLoginRequired', lang, { 
+          provider: providerNames 
+        }),
         isThirdPartyUser: true,
         providers: user.providers
       });
@@ -144,13 +156,17 @@ const signIn = async (req, res) => {
     // 檢查密碼是否存在
     if (!user.password) {
       console.error('用戶密碼不存在:', user._id);
-      return res.status(401).json({ message: "帳號或密碼錯誤" });
+      return res.status(401).json({ 
+        message: getMessage('auth.accountPasswordError', lang)
+      });
     }
 
+    // 驗證密碼
     const isMatch = await bcrypt.compare(password, user.password);
-    
     if (!isMatch) {
-      return res.status(401).json({ message: "密碼錯誤" });
+      return res.status(401).json({ 
+        message: getMessage('auth.invalidPassword', lang)
+      });
     }
 
     // 處理 session
@@ -166,8 +182,9 @@ const signIn = async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    // 返回成功響應
     res.json({
-      message: "登入成功",
+      message: getMessage('auth.loginSuccess', lang),
       accessToken,
       user: {
         id: user._id,
@@ -180,7 +197,9 @@ const signIn = async (req, res) => {
     });
   } catch (error) {
     console.error("登入錯誤:", error);
-    res.status(500).json({ message: "登入失敗，請稍後再試" });
+    res.status(500).json({ 
+      message: getMessage('auth.loginFailed', lang)
+    });
   }
 };
 

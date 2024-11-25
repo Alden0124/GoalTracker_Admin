@@ -9,7 +9,7 @@ export const getLineUserInfo = async (code) => {
         Authorization: `Bearer ${tokenData.access_token}`,
       },
     });
-
+   
     return {
       sub: userResponse.data.userId,
       name: userResponse.data.displayName,

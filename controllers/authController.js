@@ -72,17 +72,20 @@ const updateUserSession = async (user, req) => {
 // 身份驗證相關函數
 const signUp = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { email, password, username } = req.body;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
+    // 如果沒有提供用戶名，使用 email 前綴
+    const finalUsername = username || email.split('@')[0];
+
     // 檢查必要欄位
-    if (!email || !password || !username) {
+    if (!email || !password || !finalUsername) {
       return res.status(400).json({
         message: getMessage("auth.missingFields", lang),
         missingFields: {
           email: !email,
           password: !password,
-          username: !username,
+          username: !finalUsername,
         },
       });
     }
@@ -93,7 +96,7 @@ const signUp = async (req, res) => {
 
     // 創建新用戶
     const user = new User({
-      username,
+      username: finalUsername,
       email,
       password: hashedPassword,
       providers: ["local"],
@@ -212,25 +215,24 @@ const signIn = async (req, res) => {
 
 const lineSignIn = async (req, res) => {
   try {
-    // 1. 獲取 LINE 登入資訊
     const { code } = req.body;
     const lineUserInfo = await getLineUserInfo(code);
     const { sub: lineUserId, name: displayName, picture: pictureUrl } = lineUserInfo;
 
-    // 2. 使用 LINE userId 查找現有用戶
     let user = await User.findOne({
       'providerTokens.line.userId': lineUserId
     });
 
     if (!user) {
-      // 3A. 如果用戶不存在，創建新用戶
       user = new User({
         username: displayName,
+        oauthName: displayName,
         avatar: pictureUrl,
         providers: ['line'],
         providerTokens: {
           line: {
             userId: lineUserId,
+            displayName: displayName,
             accessToken: lineUserInfo.accessToken,
             refreshToken: lineUserInfo.refreshToken,
             expiresIn: lineUserInfo.expiresIn,
@@ -239,8 +241,6 @@ const lineSignIn = async (req, res) => {
         }
       });
     } else {
-      // 3B. 如果用戶存在，更新用戶資訊
-      // 更新 LINE 令牌資訊
       user.providerTokens.line = {
         userId: lineUserId,
         accessToken: lineUserInfo.accessToken,
@@ -249,37 +249,32 @@ const lineSignIn = async (req, res) => {
         expiresAt: new Date(Date.now() + lineUserInfo.expiresIn * 1000)
       };
 
-      // 確保用戶的提供者列表中包含 LINE
       if (!user.providers.includes('line')) {
         user.providers.push('line');
       }
 
-      // 更新用戶基本資訊
-      user.username = displayName;
+      user.oauthName = displayName;
       user.avatar = pictureUrl;
     }
 
-    // 4. 保存用戶資訊
     await user.save();
 
-    // 5. 處理用戶會話
     const refreshToken = await updateUserSession(user, req);
     res.cookie('refreshToken', refreshToken, getCookieConfig(req));
 
-    // 6. 生成訪問令牌
     const accessToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
 
-    // 7. 返回登入成功響應
     res.json({
       message: '登入成功',
       accessToken,
       user: {
         id: user._id,
         username: user.username,
+        oauthName: user.oauthName,
         email: user.email,
         avatar: user.avatar,
         isEmailVerified: user.isEmailVerified,
@@ -288,13 +283,10 @@ const lineSignIn = async (req, res) => {
     });
 
   } catch (error) {
-    // 8. 錯誤處理
     console.error('LINE 登入錯誤:', error);
     res.status(500).json({ message: '登入失敗，請稍後再試' });
   }
 };
-
-
 
 
 const refreshToken = async (req, res) => {
@@ -322,7 +314,6 @@ const refreshToken = async (req, res) => {
     const session = user.sessions.find((s) => s.refreshToken === refreshToken);
 
     if (new Date() > session.expiresAt) {
-      // 移除過期的 session
       user.sessions = user.sessions.filter(
         (s) => s.refreshToken !== refreshToken
       );
@@ -330,11 +321,9 @@ const refreshToken = async (req, res) => {
       return res.status(403).json({ message: "更新令牌已過期" });
     }
 
-    // 更新 session 的最後使用時間
     session.lastUsed = new Date();
     await user.save();
 
-    // 生成新的 accessToken
     const accessToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -352,55 +341,45 @@ const refreshToken = async (req, res) => {
 const googleSignIn = async (req, res) => {
   try {
     const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ message: "Google Token 不能為空" });
-    }
-
-    const payload = await verifyGoogleToken(token);
-    if (!payload) {
-      return res.status(401).json({ message: "Google 驗證失敗" });
-    }
-
-    // 只通過 Google ID 或 email 查找 Google 登入的用戶
+    const googleUserInfo = await verifyGoogleToken(token);
+    const {providerId, email, username, avatar } = googleUserInfo;
+    console.log('googleUserInfo', googleUserInfo);
     let user = await User.findOne({
-      $and: [
-        {
-          $or: [
-            { "providerTokens.google.userId": payload.sub },
-            { email: payload.email },
-          ],
-        },
-        { providers: "google" }, // 確保查找 Google 登入的用戶
-      ],
+      'providerTokens.google.userId': providerId
     });
 
-    const googleTokenData = {
-      userId: payload.sub,
-      accessToken: token,
-      expiresAt: new Date(Date.now() + 3600 * 1000),
-    };
-
     if (!user) {
-      // 創建新的 Google 用戶
+      const oauthName = username || email.split('@')[0];
       user = new User({
-        username: payload.name,
-        email: payload.email,
-        avatar: payload.picture,
+        username: oauthName,
+        oauthName: oauthName,
+        email: email,
+        avatar: avatar,
         isEmailVerified: true,
-        providers: ["google"],
+        providers: ['google'],
         providerTokens: {
-          google: googleTokenData,
-        },
+          google: {
+            userId: providerId,
+            accessToken: token
+          }
+        }
       });
     } else {
-      // 更新現有 Google 用戶的資訊
-      user.providerTokens.google = googleTokenData;
-      user.isEmailVerified = true;
+      user.providerTokens.google = {
+        userId: providerId,
+        accessToken: token
+      };
+
+      if (!user.providers.includes('google')) {
+        user.providers.push('google');
+      }
+
+      const oauthName = username || email.split('@')[0];
+      user.oauthName = oauthName;
+      user.avatar = avatar;
     }
 
     await user.save();
-    // 處理 session 和 token
     const refreshToken = await updateUserSession(user, req);
     res.cookie("refreshToken", refreshToken, getCookieConfig(req));
 
@@ -414,6 +393,7 @@ const googleSignIn = async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
+        oauthName: user.oauthName,
         email: user.email,
         avatar: user.avatar,
         isEmailVerified: true,
@@ -468,23 +448,19 @@ const signOut = async (req, res) => {
     }
 
     if (allDevices === "true") {
-      // 登出所有裝置
       user.sessions = [];
     } else {
-      // 只登出當前裝置
       user.sessions = user.sessions.filter(
         (session) => session.refreshToken !== refreshToken
       );
     }
 
-    // 如果用戶有第三方登入，處理第三方登出
     if (user.providers?.length > 0) {
       await handleThirdPartySignOut(user);
     }
 
     await user.save();
 
-    // 清除 cookie
     res.clearCookie("refreshToken", getCookieConfig(req));
 
     res.json({ message: "登出成功" });
@@ -524,7 +500,6 @@ const handleGoogleSignOut = async (user) => {
         },
       });
     }
-    // 清除 Google 令牌
     user.providerTokens.google = {};
   } catch (error) {
     console.error("Google 登出錯誤:", error);
@@ -550,11 +525,10 @@ const handleLineSignOut = async (user) => {
         }
       );
     }
-    // 只清除令牌相關資訊，保留 userId
     if (user.providerTokens?.line) {
-      const userId = user.providerTokens.line.userId;  // 保存 userId
+      const userId = user.providerTokens.line.userId;
       user.providerTokens.line = {
-        userId: userId  // 保留 userId
+        userId: userId
       };
     }
   } catch (error) {

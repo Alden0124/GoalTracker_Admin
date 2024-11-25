@@ -20,9 +20,10 @@ const sessionSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: function() {
-      return this.providers.includes('local');
-    },
+    trim: true
+  },
+  oauthName: {  // 新增 oauthName 欄位
+    type: String,
     trim: true
   },
   email: {
@@ -99,24 +100,6 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-userSchema.pre('save', function(next) {
-  if (this.providers && this.providers.length > 0) {
-    this.providers.forEach(provider => {
-      if (!this.providerTokens[provider]) {
-        this.providerTokens[provider] = {};
-      }
-    });
-  }
-  if (!this.username && this.providers?.length > 0) {
-    if (this.providerTokens?.line?.userId) {
-      this.username = `${this.providerTokens.line.displayName || 'LINE用戶'}_${this.providerTokens.line.userId.slice(-6)}`;
-    } else if (this.providerTokens?.google?.userId) {
-      const emailPrefix = this.email.split('@')[0];
-      this.username = `${emailPrefix}_${this.providerTokens.google.userId.slice(-6)}`;
-    }
-  }
-  next();
-});
 
 userSchema.methods.hasProvider = function(provider) {
   return this.providers.includes(provider) && 
@@ -158,7 +141,11 @@ userSchema.index({ 'providerTokens.line.userId': 1 }, {
   background: true,
 });
 
-userSchema.index({ 'providerTokens.google.userId': 1 }, { sparse: true });
+userSchema.index({ 'providerTokens.google.userId': 1 }, { 
+  unique: true,
+  sparse: true,
+  background: true
+});
 
 userSchema.methods.hasLineAccount = function() {
   return this.providers.includes('line') && 

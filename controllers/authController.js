@@ -2,7 +2,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
-import { handleUploadError } from "../utils/cloudinaryHelper.js";
 import { verifyGoogleToken } from "../config/googleAuth.js";
 import axios from "axios";
 import { getLineUserInfo } from "../config/lineAuth.js";
@@ -342,7 +341,6 @@ const lineSignIn = async (req, res) => {
     res.status(500).json({ message: '登入失敗，請稍後再試' });
   }
 };
-
 
 const refreshToken = async (req, res) => {
   try {

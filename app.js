@@ -1,8 +1,6 @@
-import express from "express";
-import path from "path";
+import express from 'express';
 import cookieParser from "cookie-parser";
 import logger from "morgan";
-import { fileURLToPath } from "url";
 import swaggerUi from "swagger-ui-express";
 import { specs } from "./config/swagger.js";
 import cors from "cors";
@@ -14,8 +12,6 @@ import verificationRouter from "./routes/verification.js";
 import { initializeMailer } from './config/nodemailer.js';
 
 const app = express();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // CORS 配置
 const allowedOrigins = [

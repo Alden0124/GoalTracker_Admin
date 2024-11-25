@@ -103,6 +103,21 @@ const userSchema = new mongoose.Schema({
   sessions: {
     type: [sessionSchema],
     default: []
+  },
+  location: {    // 新增居住地
+    type: String,
+    trim: true,
+    default: ''
+  },
+  occupation: {    // 新增職稱
+    type: String,
+    trim: true,
+    default: ''
+  },
+  education: {   // 新增學歷
+    type: String,
+    trim: true,
+    default: ''
   }
 }, {
   timestamps: true

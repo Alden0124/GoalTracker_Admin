@@ -105,7 +105,6 @@ export const syncUserProfile = async (user) => {
     if (user.providers.includes("line")) {
       const lineTokens = user.providerTokens?.line;
 
-      // 檢查 token 是否有效
       if (lineTokens && new Date(lineTokens.expiresAt) > new Date()) {
         const lineResponse = await axios.get("https://api.line.me/v2/profile", {
           headers: {
@@ -116,8 +115,19 @@ export const syncUserProfile = async (user) => {
         // 更新用戶資料
         const updates = {
           username: lineResponse.data.displayName,
-          avatar: lineResponse.data.pictureUrl,
         };
+
+        // 處理頭像邏輯
+        if (lineResponse.data.pictureUrl) {
+          // 如果是第一次設置第三方頭像或目前沒有第三方頭像
+          if (!user.thirdPartyAvatar) {
+            updates.thirdPartyAvatar = lineResponse.data.pictureUrl;
+            // 如果用戶沒有設置自定義頭像，使用第三方頭像
+            if (!user.avatar) {
+              updates.avatar = lineResponse.data.pictureUrl;
+            }
+          }
+        }
 
         // 只更新有變化的欄位
         const needsUpdate = Object.keys(updates).some(
@@ -149,9 +159,20 @@ export const syncUserProfile = async (user) => {
 
           const updates = {
             username: googleResponse.data.name,
-            avatar: googleResponse.data.picture,
             email: googleResponse.data.email,
           };
+
+          // 處理頭像邏輯
+          if (googleResponse.data.picture) {
+            // 如果是第一次設置第三方頭像或目前沒有第三方頭像
+            if (!user.thirdPartyAvatar) {
+              updates.thirdPartyAvatar = googleResponse.data.picture;
+              // 如果用戶沒有設置自定義頭像，使用第三方頭像
+              if (!user.avatar) {
+                updates.avatar = googleResponse.data.picture;
+              }
+            }
+          }
 
           // 只更新有變化的欄位
           const needsUpdate = Object.keys(updates).some(
@@ -218,9 +239,10 @@ export const getCurrentUser = async (req, res) => {
 
     res.json({
       user: {
-        _id: user._id,
+        id: user._id,
         username: user.username,
         avatar: user.avatar,
+        thirdPartyAvatar: user.thirdPartyAvatar,
         email: user.email,
         providers: user.providers,
       },
@@ -246,9 +268,10 @@ export const syncProfile = async (req, res) => {
     res.json({
       message: "用戶資料同步成功",
       user: {
-        _id: user._id,
+        id: user._id,
         username: user.username,
         avatar: user.avatar,
+        thirdPartyAvatar: user.thirdPartyAvatar,
         email: user.email,
         providers: user.providers,
       },

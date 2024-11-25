@@ -60,7 +60,15 @@ const userSchema = new mongoose.Schema({
       return this.providers ? this.providers.includes('google') : false;
     }
   },
+  localEmailVerified: {  // 新增欄位
+    type: Boolean,
+    default: false
+  },
   avatar: {
+    type: String,
+    default: ''
+  },
+  thirdPartyAvatar: {  // 新增欄位
     type: String,
     default: ''
   },

@@ -11,7 +11,7 @@ export default {
     invalidEmail: "無效的電子郵件格式",
     invalidPassword: "密碼長度必須至少為 6 個字符",
     invalidUsername: "使用者名稱只能包含字母、數字和底線",
-    
+    emailNotVerified: "此信箱尚未驗證",
     // 登入相關
     loginSuccess: "登入成功",
     loginFailed: "登入失敗，請稍後再試",
@@ -36,5 +36,6 @@ export default {
   validation: {
     required: "{field}為必填項目",
     invalidFormat: "{field}格式不正確"
+    
   }
 }; 

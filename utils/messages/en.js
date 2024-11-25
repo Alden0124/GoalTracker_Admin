@@ -11,7 +11,7 @@ export default {
     invalidEmail: "Invalid email format",
     invalidPassword: "Password must be at least 6 characters long",
     invalidUsername: "Username can only contain letters, numbers and underscores",
-    
+    emailNotVerified: "This email is not verified",
     // Login related
     loginSuccess: "Login successful",
     loginFailed: "Login failed, please try again later",

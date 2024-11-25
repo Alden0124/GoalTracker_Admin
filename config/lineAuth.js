@@ -1,19 +1,26 @@
 import axios from "axios";
+import jwt from "jsonwebtoken";
 
 export const getLineUserInfo = async (code) => {
   try {
     const tokenData = await getLineAccessToken(code);
+    
+    // 解析 ID Token 獲取 email
+    const decodedIdToken = jwt.decode(tokenData.id_token);
+    const email = decodedIdToken?.email;
 
     const userResponse = await axios.get("https://api.line.me/v2/profile", {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
       },
     });
-   
+
+
     return {
       sub: userResponse.data.userId,
       name: userResponse.data.displayName,
       picture: userResponse.data.pictureUrl,
+      email: email,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
       expiresIn: tokenData.expires_in,
@@ -24,7 +31,6 @@ export const getLineUserInfo = async (code) => {
   }
 };
 
-// 添加獲取 LINE access token 的輔助函數
 const getLineAccessToken = async (code) => {
   const tokenResponse = await axios.post(
     "https://api.line.me/oauth2/v2.1/token",

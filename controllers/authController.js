@@ -7,6 +7,7 @@ import { verifyGoogleToken } from "../config/googleAuth.js";
 import axios from "axios";
 import { getLineUserInfo } from "../config/lineAuth.js";
 import { getMessage } from "../utils/i18n.js";
+import { sendVerificationEmail } from "../config/nodemailer.js";
 
 // Cookie 配置函數
 const getCookieConfig = (req) => {
@@ -74,8 +75,6 @@ const signUp = async (req, res) => {
   try {
     const { email, password, username } = req.body;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
-
-    // 如果沒有提供用戶名，使用 email 前綴
     const finalUsername = username || email.split('@')[0];
 
     // 檢查必要欄位
@@ -90,35 +89,75 @@ const signUp = async (req, res) => {
       });
     }
 
+    // 查找是否存在相同 email 的用戶
+    let user = await User.findOne({ email });
+
     // 加密密碼
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 創建新用戶
-    const user = new User({
-      username: finalUsername,
-      email,
-      password: hashedPassword,
-      providers: ["local"],
-    });
+    if (!user) {
+      // 完全新用戶
+      user = new User({
+        username: finalUsername,
+        email,
+        password: hashedPassword,
+        providers: ["local"],
+        localEmailVerified: false,  // 新用戶需要驗證
+      });
+    } else {
+      // 已存在的用戶
+      if (user.providers.includes('local')) {
+        return res.status(400).json({
+          message: getMessage("auth.emailRegistered", lang),
+        });
+      }
+
+      // 添加本地登入方式
+      user.password = hashedPassword;
+      if (!user.providers.includes('local')) {
+        user.providers.push('local');
+        user.localEmailVerified = false;  // 需要驗證 email
+      }
+
+      if (!user.username) {
+        user.username = finalUsername;
+      }
+    }
+
+    // 生成驗證碼
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.verificationCode = {
+      code: verificationCode,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 分鐘後過期
+    };
 
     await user.save();
 
+    // 發送驗證郵件
+    const isEmailSent = await sendVerificationEmail(email, verificationCode);
+    if (!isEmailSent) {
+      return res.status(500).json({ 
+        message: getMessage("auth.verificationEmailFailed", lang)
+      });
+    }
+
     res.status(201).json({
       message: getMessage("auth.signupSuccess", lang),
+      needVerification: true,
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
+        avatar: user.avatar,
+        isEmailVerified: user.isEmailVerified,
+        localEmailVerified: user.localEmailVerified,
+        providers: user.providers,
       },
     });
   } catch (error) {
     console.error("註冊錯誤:", error);
-    if (error.code === 11000) {
-      return res.status(400).json({
-        message: getMessage("auth.emailRegistered", lang),
-      });
-    }
+    const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
     res.status(500).json({
       message: getMessage("auth.signupFailed", lang),
     });
@@ -130,7 +169,6 @@ const signIn = async (req, res) => {
     const { email, password } = req.body;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
-    // 檢查必要欄位
     if (!email || !password) {
       return res.status(400).json({
         message: getMessage("auth.missingCredentials", lang),
@@ -139,7 +177,6 @@ const signIn = async (req, res) => {
 
     const user = await User.findOne({ email });
 
-    // 檢查用戶是否存在
     if (!user) {
       return res.status(401).json({
         message: getMessage("auth.emailNotRegistered", lang),
@@ -147,10 +184,8 @@ const signIn = async (req, res) => {
       });
     }
 
-    // 檢查是否為第三方登入用戶
-    if (
-      user.providers?.some((provider) => ["google", "line"].includes(provider))
-    ) {
+    // 檢查是否有本地登入方式
+    if (!user.providers.includes('local')) {
       const providerNames = user.providers
         .filter((p) => ["google", "line"].includes(p))
         .map((p) => (p === "line" ? "LINE" : "Google"))
@@ -165,11 +200,12 @@ const signIn = async (req, res) => {
       });
     }
 
-    // 檢查密碼是否存在
-    if (!user.password) {
-      console.error("用戶密碼不存在:", user._id);
-      return res.status(401).json({
-        message: getMessage("auth.accountPasswordError", lang),
+    // 檢查本地登入的 email 是否已驗證
+    if (!user.localEmailVerified) {
+      return res.status(403).json({
+        message: getMessage("auth.emailNotVerified", lang),
+        needVerification: true,
+        email: user.email
       });
     }
 
@@ -217,17 +253,26 @@ const lineSignIn = async (req, res) => {
   try {
     const { code } = req.body;
     const lineUserInfo = await getLineUserInfo(code);
-    const { sub: lineUserId, name: displayName, picture: pictureUrl } = lineUserInfo;
+    const { sub: lineUserId, name: displayName, picture: pictureUrl, email } = lineUserInfo;
 
+    // 1. 先用 LINE userId 查找用戶
     let user = await User.findOne({
       'providerTokens.line.userId': lineUserId
     });
 
+    // 2. 如果沒找到用戶但有 email，嘗試用 email 查找
+    if (!user && email) {
+      user = await User.findOne({ email });
+    }
+
     if (!user) {
+      // 3A. 完全新用戶：創建新帳戶
       user = new User({
         username: displayName,
         oauthName: displayName,
+        email: email || '',
         avatar: pictureUrl,
+        isEmailVerified: !!email,
         providers: ['line'],
         providerTokens: {
           line: {
@@ -241,20 +286,30 @@ const lineSignIn = async (req, res) => {
         }
       });
     } else {
+      // 3B. 現有用戶：更新或添 LINE 登入資訊
+      if (!user.providerTokens) {
+        user.providerTokens = {};
+      }
+
+      // 更新 LINE 登入資訊
       user.providerTokens.line = {
         userId: lineUserId,
+        displayName: displayName,
         accessToken: lineUserInfo.accessToken,
         refreshToken: lineUserInfo.refreshToken,
         expiresIn: lineUserInfo.expiresIn,
         expiresAt: new Date(Date.now() + lineUserInfo.expiresIn * 1000)
       };
 
+      // 確保 providers 包含 LINE
       if (!user.providers.includes('line')) {
         user.providers.push('line');
       }
 
-      user.oauthName = displayName;
-      user.avatar = pictureUrl;
+      // 如果用戶沒有頭像，使用 LINE 頭像
+      if (!user.avatar) {
+        user.avatar = pictureUrl;
+      }
     }
 
     await user.save();
@@ -342,13 +397,20 @@ const googleSignIn = async (req, res) => {
   try {
     const { token } = req.body;
     const googleUserInfo = await verifyGoogleToken(token);
-    const {providerId, email, username, avatar } = googleUserInfo;
-    console.log('googleUserInfo', googleUserInfo);
+    const { providerId, email, username, avatar } = googleUserInfo;
+
+    // 1. 先用 Google ID 查找用戶
     let user = await User.findOne({
       'providerTokens.google.userId': providerId
     });
 
+    // 2. 如果沒找到用戶但有 email，嘗試用 email 查找
+    if (!user && email) {
+      user = await User.findOne({ email });
+    }
+
     if (!user) {
+      // 3A. 完全新用戶：創建新帳戶
       const oauthName = username || email.split('@')[0];
       user = new User({
         username: oauthName,
@@ -365,18 +427,31 @@ const googleSignIn = async (req, res) => {
         }
       });
     } else {
+      // 3B. 現有用戶：更新或添加 Google 登入資訊
+      if (!user.providerTokens) {
+        user.providerTokens = {};
+      }
+
+      // 更新 Google 登入資訊
       user.providerTokens.google = {
         userId: providerId,
         accessToken: token
       };
 
+      // 確保 providers 包含 Google
       if (!user.providers.includes('google')) {
         user.providers.push('google');
       }
 
-      const oauthName = username || email.split('@')[0];
-      user.oauthName = oauthName;
-      user.avatar = avatar;
+      // 如果用戶沒有頭像，使用 Google 頭像
+      if (!user.avatar) {
+        user.avatar = avatar;
+      }
+
+      // 如果是通過 email 找到的用戶，確保 email 已驗證
+      if (!user.isEmailVerified) {
+        user.isEmailVerified = true;
+      }
     }
 
     await user.save();
@@ -411,7 +486,7 @@ const signInWithProvider = async (req, res) => {
     const { provider, token } = req.body;
 
     if (!provider || !token) {
-      return res.status(400).json({ message: "缺少必要參數" });
+      return res.status(400).json({ message: "缺必要參數" });
     }
 
     let userData;
@@ -555,53 +630,6 @@ const getActiveSessions = async (req, res) => {
   } catch (error) {
     console.error("獲取登入裝置錯誤:", error);
     res.status(500).json({ message: "獲取登入裝置時發生錯誤" });
-  }
-};
-
-export const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({ message: "此信箱尚未註冊" });
-    }
-
-    if (user.isThirdPartyUser()) {
-      return res.status(403).json({
-        message:
-          "第三方登入用戶不能使用密碼重置功能，請使用對應的第三方服務重置密碼",
-        isThirdPartyUser: true,
-      });
-    }
-
-    // ... 其餘代碼保持不變 ...
-  } catch (error) {
-    console.error("忘記密碼錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
-  }
-};
-
-export const resetPassword = async (req, res) => {
-  try {
-    const { email, code, newPassword } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({ message: "用戶不存在" });
-    }
-
-    if (user.isThirdPartyUser()) {
-      return res.status(403).json({
-        message: "第三方登入用戶不能重置密碼，請使用對應的第三方服務重置密碼",
-        isThirdPartyUser: true,
-      });
-    }
-
-    // ... 其餘代碼保持不變 ...
-  } catch (error) {
-    console.error("重置密碼錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
   }
 };
 

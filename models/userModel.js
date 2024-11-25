@@ -155,8 +155,9 @@ userSchema.methods.needsEmailForOperation = function() {
 userSchema.index({ 'providerTokens.line.userId': 1 }, { 
   unique: true, 
   sparse: true,
-  background: true
+  background: true,
 });
+
 userSchema.index({ 'providerTokens.google.userId': 1 }, { sparse: true });
 
 userSchema.methods.hasLineAccount = function() {

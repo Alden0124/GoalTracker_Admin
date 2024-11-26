@@ -7,6 +7,7 @@ import {
   getPublicIdFromUrl,
 } from "../utils/cloudinaryHelper.js";
 import axios from "axios";
+import Follow from "../models/followModel.js";
 
 export const updateUserProfile = async (req, res) => {
   try {
@@ -277,6 +278,10 @@ export const getCurrentUser = async (req, res) => {
     // 同步用戶資料
     user = await syncUserProfile(user);
 
+    // 獲取粉絲和追蹤數
+    const followersCount = await Follow.countDocuments({ following: user._id });
+    const followingCount = await Follow.countDocuments({ follower: user._id });
+
     res.json({
       user: {
         id: user._id,
@@ -288,6 +293,8 @@ export const getCurrentUser = async (req, res) => {
         thirdPartyAvatar: user.thirdPartyAvatar,
         email: user.email,
         providers: user.providers,
+        followersCount,
+        followingCount
       },
     });
   } catch (error) {
@@ -305,4 +312,145 @@ export const updateAvatar = async (req, res, next) => {
     }
     next();
   });
+};
+
+// 新增：根據userId獲取用戶資料
+export const getUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user?.userId; // 獲取當前登入用戶ID
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "用戶不存在" });
+    }
+
+    // 獲取粉絲和追蹤數
+    const followersCount = await Follow.countDocuments({ following: userId });
+    const followingCount = await Follow.countDocuments({ follower: userId });
+
+    // 檢查當前用戶是否已追蹤此用戶
+    let isFollowing = false;
+    if (currentUserId) {
+      const followExists = await Follow.findOne({
+        follower: currentUserId,
+        following: userId
+      });
+      isFollowing = !!followExists;
+    }
+
+    res.json({
+      user: {
+        id: user._id,
+        username: user.username,
+        avatar: user.avatar,
+        location: user.location || "",
+        occupation: user.occupation || "",
+        education: user.education || "",
+        followersCount,
+        followingCount,
+        isFollowing // 新增欄位
+      },
+    });
+  } catch (error) {
+    console.error("獲取用戶資訊錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 追蹤用戶
+export const followUser = async (req, res) => {
+  try {
+    const followerId = req.user.userId; // 當前登入用戶
+    const followingId = req.params.userId; // 要追蹤的用戶
+
+    // 檢查是否追蹤自己
+    if (followerId === followingId) {
+      return res.status(400).json({ message: "不能追蹤自己" });
+    }
+
+    // 檢查要追蹤的用戶是否存在
+    const followingUser = await User.findById(followingId);
+    if (!followingUser) {
+      return res.status(404).json({ message: "用戶不存在" });
+    }
+
+    // 創建追蹤關係
+    await Follow.create({
+      follower: followerId,
+      following: followingId,
+    });
+
+    res.status(200).json({ message: "追蹤成功" });
+  } catch (error) {
+    if (error.code === 11000) { // MongoDB 重複鍵錯誤
+      return res.status(400).json({ message: "已經追蹤過此用戶" });
+    }
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 取消追蹤
+export const unfollowUser = async (req, res) => {
+  try {
+    const followerId = req.user.userId;
+    const followingId = req.params.userId;
+
+    await Follow.findOneAndDelete({
+      follower: followerId,
+      following: followingId,
+    });
+
+    res.status(200).json({ message: "取消追蹤成功" });
+  } catch (error) {
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 獲取用戶的追蹤者列表
+export const getFollowers = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    const followers = await Follow.find({ following: userId })
+      .populate('follower', 'username avatar _id')
+      .sort({ createdAt: -1 });
+
+    const followersList = followers.map(f => ({
+      id: f.follower._id,
+      username: f.follower.username,
+      avatar: f.follower.avatar,
+    }));
+
+    res.json({
+      followers: followersList,
+      total: followersList.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 獲取用戶的追蹤列表
+export const getFollowing = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    const following = await Follow.find({ follower: userId })
+      .populate('following', 'username avatar _id')
+      .sort({ createdAt: -1 });
+
+    const followingList = following.map(f => ({
+      id: f.following._id,
+      username: f.following.username,
+      avatar: f.following.avatar,
+    }));
+
+    res.json({
+      following: followingList,
+      total: followingList.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
 };

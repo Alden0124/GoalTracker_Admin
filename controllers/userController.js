@@ -454,3 +454,44 @@ export const getFollowing = async (req, res) => {
     res.status(500).json({ message: "伺服器錯誤" });
   }
 };
+
+// 移除粉絲
+export const removeFollower = async (req, res) => {
+  try {
+    const currentUserId = req.user.userId;  // 當前登入的用戶
+    const targetUserId = req.params.userId; // 要操作的用戶頁面
+    const followerId = req.params.followerId; // 要移除的粉絲
+    
+    // 檢查是否有權限（只能在自己的頁面移除粉絲）
+    if (currentUserId !== targetUserId) {
+      return res.status(403).json({ message: "您沒有權限執行此操作" });
+    }
+
+    console.log('正在檢查追蹤關係:', {
+      follower: followerId,
+      following: currentUserId
+    });
+
+    const followRelation = await Follow.findOne({
+      follower: followerId,
+      following: currentUserId
+    });
+
+    console.log('查詢結果:', followRelation);
+
+    if (!followRelation) {
+      return res.status(400).json({ message: "此用戶並不是您的粉絲" });
+    }
+
+    // 移除追蹤關係
+    await Follow.findOneAndDelete({
+      follower: followerId,
+      following: currentUserId
+    });
+
+    res.status(200).json({ message: "已成功移除粉絲" });
+  } catch (error) {
+    console.error("移除粉絲錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};

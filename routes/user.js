@@ -10,6 +10,7 @@ import {
   unfollowUser,
   getFollowers,
   getFollowing,
+  removeFollower,
 } from "../controllers/userController.js";
 
 const router = express.Router();
@@ -22,7 +23,8 @@ router.patch("/profile", verifyAuth, updateAvatar, updateUserProfile);
 // 追蹤相關路由
 router.post("/follow/:userId", verifyAuth, followUser);
 router.delete("/follow/:userId", verifyAuth, unfollowUser);
-router.get("/followers/:userId", getFollowers);
-router.get("/following/:userId", getFollowing);
+router.get("/followers/:userId", verifyAuth, getFollowers);
+router.get("/following/:userId", verifyAuth, getFollowing);
+router.delete("/followers/:userId/:followerId", verifyAuth, removeFollower);
 
 export default router;

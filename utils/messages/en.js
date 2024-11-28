@@ -43,6 +43,11 @@ export default {
   },
   goal: {
     missingFields: "Please provide goal title and start date",
-    createSuccess: "Goal created successfully"
+    createSuccess: "Goal created successfully",
+    fetchSuccess: "Fetch goals successfully",
+    notFound: "Goal not found",
+    unauthorized: "You are not authorized to perform this action",
+    updateSuccess: "Goal updated successfully",
+    deleteSuccess: "Goal deleted successfully"
   }
 }; 

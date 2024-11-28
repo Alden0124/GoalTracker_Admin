@@ -37,5 +37,13 @@ export default {
     required: "{field}為必填項目",
     invalidFormat: "{field}格式不正確"
     
-  }
+  },
+  goal: {
+    missingFields: "請提供目標標題和開始日期",
+    createSuccess: "目標創建成功"
+  },
+  error: {
+    serverError: "伺服器錯誤",
+    unauthorized: "未授權的請求"
+  },
 }; 

@@ -8,6 +8,7 @@ import helmet from "helmet";
 import { connectDB } from "./config/database.js";
 import authRouter from "./routes/auth.js";
 import userRouter from "./routes/user.js";
+import goalsRouter from "./routes/goals.js";
 import verificationRouter from "./routes/verification.js";
 import { initializeMailer } from './config/nodemailer.js';
 
@@ -75,6 +76,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/verification", verificationRouter);
+app.use('/api/goals', goalsRouter);
 
 // Swagger 文檔
 if (process.env.NODE_ENV !== 'production') {

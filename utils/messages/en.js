@@ -40,5 +40,9 @@ export default {
   error: {
     serverError: "Server error",
     unauthorized: "Unauthorized request"
+  },
+  goal: {
+    missingFields: "Please provide goal title and start date",
+    createSuccess: "Goal created successfully"
   }
 }; 

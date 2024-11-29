@@ -5,7 +5,8 @@ import {
   getGoals,
   getUserGoals,
   updateGoal,
-  deleteGoal
+  deleteGoal,
+  toggleGoalLike
 } from "../controllers/goalController.js";
 
 const router = express.Router();
@@ -16,6 +17,9 @@ router.get("/", verifyAuth, getGoals);                      // 獲取目標列�
 router.get("/user/:userId", verifyAuth, getUserGoals);      // 獲取特定用戶的目標列表
 router.put("/updateGoal/:goalId", verifyAuth, updateGoal);  // 更新目標
 router.delete("/deleteGoal/:goalId", verifyAuth, deleteGoal); // 刪除目標
+
+// 添加點讚相關路由
+router.post("/likeGoal/:goalId", verifyAuth, toggleGoalLike);    // 新增：切換目標的點讚狀態
 
 // 進度相關路由
 // router.post("/:goalId/progress", verifyAuth, createProgress);

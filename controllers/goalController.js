@@ -59,11 +59,23 @@ export const getGoals = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     // 獲取目標列表
-    const goals = await Goal.find(query)
+    let goals = await Goal.find(query)
       .populate('user', 'username avatar')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit));
+
+    // 為每個目標添加點讚狀態
+    goals = goals.map(goal => {
+      const goalObj = goal.toObject();
+      delete goalObj.__v;
+      
+      return {
+        ...goalObj,
+        isLiked: goal.likes.includes(userId),
+        likeCount: goal.likes.length
+      };
+    });
 
     // 獲取總數
     const total = await Goal.countDocuments(query);
@@ -111,11 +123,23 @@ export const getUserGoals = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     // 獲取目標列表
-    const goals = await Goal.find(query)
+    let goals = await Goal.find(query)
       .populate('user', 'username avatar')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit));
+
+    // 為每個目標添加點讚狀態
+    goals = goals.map(goal => {
+      const goalObj = goal.toObject();
+      delete goalObj.__v;
+      
+      return {
+        ...goalObj,
+        isLiked: goal.likes.includes(currentUserId),
+        likeCount: goal.likes.length
+      };
+    });
 
     // 獲取總數
     const total = await Goal.countDocuments(query);
@@ -215,6 +239,58 @@ export const deleteGoal = async (req, res) => {
 
   } catch (error) {
     console.error('刪除目標錯誤:', error);
+    const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
+    res.status(500).json({ message: getMessage("serverError", lang) });
+  }
+};
+
+// 切換目標點讚狀態
+export const toggleGoalLike = async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { isLiked } = req.body;  // 從請求體中獲取目標狀態
+    const userId = req.user.userId;
+    const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
+
+    // 檢查目標是否存在
+    const goal = await Goal.findById(goalId);
+    if (!goal) {
+      return res.status(404).json({ message: getMessage("goal.notFound", lang) });
+    }
+
+    // 檢查當前點讚狀態
+    const hasLiked = goal.likes.includes(userId);
+
+    // 根據請求的狀態進行更新
+    if (isLiked && !hasLiked) {
+      // 添加點讚
+      goal.likes.push(userId);
+      await goal.save();
+      res.json({
+        message: getMessage("goal.likeSuccess", lang),
+        liked: true,
+        likeCount: goal.likes.length
+      });
+    } else if (!isLiked && hasLiked) {
+      // 取消點讚
+      goal.likes = goal.likes.filter(id => id.toString() !== userId);
+      await goal.save();
+      res.json({
+        message: getMessage("goal.unlikeSuccess", lang),
+        liked: false,
+        likeCount: goal.likes.length
+      });
+    } else {
+      // 當前狀態已經符合請求，直接返回
+      res.json({
+        message: getMessage("goal.noChange", lang),
+        liked: isLiked,
+        likeCount: goal.likes.length
+      });
+    }
+
+  } catch (error) {
+    console.error('切換點讚狀態錯誤:', error);
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
     res.status(500).json({ message: getMessage("serverError", lang) });
   }

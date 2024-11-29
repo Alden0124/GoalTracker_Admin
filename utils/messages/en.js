@@ -48,6 +48,8 @@ export default {
     notFound: "Goal not found",
     unauthorized: "You are not authorized to perform this action",
     updateSuccess: "Goal updated successfully",
-    deleteSuccess: "Goal deleted successfully"
+    deleteSuccess: "Goal deleted successfully",
+    likeSuccess: "Goal liked successfully",
+    unlikeSuccess: "Goal unliked successfully"
   }
 }; 

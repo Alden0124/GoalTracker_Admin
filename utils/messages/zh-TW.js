@@ -45,7 +45,9 @@ export default {
     notFound: "找不到該目標",
     unauthorized: "您沒有權限執行此操作",
     updateSuccess: "目標更新成功",
-    deleteSuccess: "目標刪除成功"
+    deleteSuccess: "目標刪除成功",
+    likeSuccess: "目標點讚成功",
+    unlikeSuccess: "目標取消點讚成功"
   },
   error: {
     serverError: "伺服器錯誤",

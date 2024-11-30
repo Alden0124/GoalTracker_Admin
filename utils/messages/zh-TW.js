@@ -19,24 +19,24 @@ export default {
     invalidPassword: "密碼錯誤",
     missingCredentials: "請提供電子郵件和密碼",
     accountPasswordError: "帳號或密碼錯誤",
-    thirdPartyLoginRequired: "此信箱使用{provider}登入，請使用對應的第三方服務登入",
-    
+    thirdPartyLoginRequired:
+      "此信箱使用{provider}登入，請使用對應的第三方服務登入",
+
     // 第三方登入
     googleLoginSuccess: "Google 登入成功",
     lineLoginSuccess: "LINE 登入成功",
     unsupportedProvider: "不支援的登入方式",
     missingProviderParams: "缺少必要參數",
-    
+
     // 登出相關
     logoutSuccess: "登出成功",
     logoutError: "登出時發生錯誤",
     missingLogoutToken: "未提供登出令牌",
-    userNotFound: "找不到使用者"
+    userNotFound: "找不到使用者",
   },
   validation: {
     required: "{field}為必填項目",
-    invalidFormat: "{field}格式不正確"
-    
+    invalidFormat: "{field}格式不正確",
   },
   goal: {
     missingFields: "請提供目標標題和開始日期",
@@ -47,10 +47,13 @@ export default {
     updateSuccess: "目標更新成功",
     deleteSuccess: "目標刪除成功",
     likeSuccess: "目標點讚成功",
-    unlikeSuccess: "目標取消點讚成功"
+    unlikeSuccess: "目標取消點讚成功",
   },
   error: {
     serverError: "伺服器錯誤",
-    unauthorized: "未授權的請求"
+    unauthorized: "未授權的請求",
   },
-}; 
+  comment: {
+    fetchSuccess: "獲取留言列表成功",
+  },
+};

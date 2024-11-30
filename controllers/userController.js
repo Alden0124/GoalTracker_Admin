@@ -1,13 +1,13 @@
-import User from "../models/userModel.js";
+import axios from "axios";
 import { upload } from "../config/cloudinary.js";
 import { handleMulterError } from "../middleware/errorHandler.js";
+import Follow from "../models/followModel.js";
+import User from "../models/userModel.js";
 import {
   deleteCloudinaryImage,
-  handleUploadError,
   getPublicIdFromUrl,
+  handleUploadError,
 } from "../utils/cloudinaryHelper.js";
-import axios from "axios";
-import Follow from "../models/followModel.js";
 
 export const updateUserProfile = async (req, res) => {
   try {
@@ -294,7 +294,7 @@ export const getCurrentUser = async (req, res) => {
         email: user.email,
         providers: user.providers,
         followersCount,
-        followingCount
+        followingCount,
       },
     });
   } catch (error) {
@@ -318,8 +318,13 @@ export const updateAvatar = async (req, res, next) => {
 export const getUserById = async (req, res) => {
   try {
     const { userId } = req.params;
-    const currentUserId = req.user?.userId; // 獲取當前登入用戶ID
-    
+    const currentUserId = req.user?.userId;
+
+    // 添加 ObjectId 格式驗證
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "無效的用戶ID格式" });
+    }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "用戶不存在" });
@@ -334,7 +339,7 @@ export const getUserById = async (req, res) => {
     if (currentUserId) {
       const followExists = await Follow.findOne({
         follower: currentUserId,
-        following: userId
+        following: userId,
       });
       isFollowing = !!followExists;
     }
@@ -349,7 +354,7 @@ export const getUserById = async (req, res) => {
         education: user.education || "",
         followersCount,
         followingCount,
-        isFollowing // 新增欄位
+        isFollowing, // 新增欄位
       },
     });
   } catch (error) {
@@ -383,7 +388,8 @@ export const followUser = async (req, res) => {
 
     res.status(200).json({ message: "追蹤成功" });
   } catch (error) {
-    if (error.code === 11000) { // MongoDB 重複鍵錯誤
+    if (error.code === 11000) {
+      // MongoDB 重複鍵錯誤
       return res.status(400).json({ message: "已經追蹤過此用戶" });
     }
     res.status(500).json({ message: "伺服器錯誤" });
@@ -411,12 +417,12 @@ export const unfollowUser = async (req, res) => {
 export const getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
-    
+
     const followers = await Follow.find({ following: userId })
-      .populate('follower', 'username avatar _id')
+      .populate("follower", "username avatar _id")
       .sort({ createdAt: -1 });
 
-    const followersList = followers.map(f => ({
+    const followersList = followers.map((f) => ({
       id: f.follower._id,
       username: f.follower.username,
       avatar: f.follower.avatar,
@@ -424,7 +430,7 @@ export const getFollowers = async (req, res) => {
 
     res.json({
       followers: followersList,
-      total: followersList.length
+      total: followersList.length,
     });
   } catch (error) {
     res.status(500).json({ message: "伺服器錯誤" });
@@ -435,12 +441,12 @@ export const getFollowers = async (req, res) => {
 export const getFollowing = async (req, res) => {
   try {
     const userId = req.params.userId;
-    
+
     const following = await Follow.find({ follower: userId })
-      .populate('following', 'username avatar _id')
+      .populate("following", "username avatar _id")
       .sort({ createdAt: -1 });
 
-    const followingList = following.map(f => ({
+    const followingList = following.map((f) => ({
       id: f.following._id,
       username: f.following.username,
       avatar: f.following.avatar,
@@ -448,7 +454,7 @@ export const getFollowing = async (req, res) => {
 
     res.json({
       following: followingList,
-      total: followingList.length
+      total: followingList.length,
     });
   } catch (error) {
     res.status(500).json({ message: "伺服器錯誤" });
@@ -458,26 +464,26 @@ export const getFollowing = async (req, res) => {
 // 移除粉絲
 export const removeFollower = async (req, res) => {
   try {
-    const currentUserId = req.user.userId;  // 當前登入的用戶
+    const currentUserId = req.user.userId; // 當前登入的用戶
     const targetUserId = req.params.userId; // 要操作的用戶頁面
     const followerId = req.params.followerId; // 要移除的粉絲
-    
+
     // 檢查是否有權限（只能在自己的頁面移除粉絲）
     if (currentUserId !== targetUserId) {
       return res.status(403).json({ message: "您沒有權限執行此操作" });
     }
 
-    console.log('正在檢查追蹤關係:', {
+    console.log("正在檢查追蹤關係:", {
       follower: followerId,
-      following: currentUserId
+      following: currentUserId,
     });
 
     const followRelation = await Follow.findOne({
       follower: followerId,
-      following: currentUserId
+      following: currentUserId,
     });
 
-    console.log('查詢結果:', followRelation);
+    console.log("查詢結果:", followRelation);
 
     if (!followRelation) {
       return res.status(400).json({ message: "此用戶並不是您的粉絲" });
@@ -486,7 +492,7 @@ export const removeFollower = async (req, res) => {
     // 移除追蹤關係
     await Follow.findOneAndDelete({
       follower: followerId,
-      following: currentUserId
+      following: currentUserId,
     });
 
     res.status(200).json({ message: "已成功移除粉絲" });

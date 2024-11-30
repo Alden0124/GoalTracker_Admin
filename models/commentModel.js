@@ -1,51 +1,45 @@
 import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema({
-  content: {
-    type: String,
-    required: true,
-    trim: true
-  },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true
-  },
-  commentType: {
-    type: String,
     required: true,
-    enum: ['progress', 'comment']
   },
   goal: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Goal",
-    required: true
+    required: true,
   },
-  progress: {
+  content: {
+    type: String,
+    required: true,
+    trim: true,
+    maxLength: 500,
+  },
+  parentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Progress"
+    ref: "Comment",
+    default: null,
   },
-  parentComment: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Comment"
-  },
-  depth: {
+  replyCount: {
     type: Number,
-    default: 0
+    default: 0,
+  },
+  type: {
+    type: String,
+    enum: ["comment", "progress"],
+    required: true,
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   updatedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
-commentSchema.index({ goal: 1, commentType: 1 });
-commentSchema.index({ progress: 1, commentType: 1 });
-commentSchema.index({ parentComment: 1 });
-
 const Comment = mongoose.model("Comment", commentSchema);
-export default Comment; 
+export default Comment;

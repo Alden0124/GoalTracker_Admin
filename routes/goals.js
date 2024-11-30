@@ -1,35 +1,36 @@
 import express from "express";
-import { verifyAuth } from "../middleware/auth.js";
+import {
+  createComment,
+  deleteComment,
+  getComments,
+  updateComment,
+} from "../controllers/commentController.js";
 import {
   createGoal,
+  deleteGoal,
   getGoals,
   getUserGoals,
+  toggleGoalLike,
   updateGoal,
-  deleteGoal,
-  toggleGoalLike
 } from "../controllers/goalController.js";
+import { verifyAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // 目標相關路由
-router.post("/createGoal", verifyAuth, createGoal);         // 創建新目標
-router.get("/", verifyAuth, getGoals);                      // 獲取目標列表
-router.get("/user/:userId", verifyAuth, getUserGoals);      // 獲取特定用戶的目標列表
-router.put("/updateGoal/:goalId", verifyAuth, updateGoal);  // 更新目標
+router.post("/createGoal", verifyAuth, createGoal); // 創建新目標
+router.get("/", verifyAuth, getGoals); // 獲取目標列表
+router.get("/user/:userId", verifyAuth, getUserGoals); // 獲取特定用戶的目標列表
+router.put("/updateGoal/:goalId", verifyAuth, updateGoal); // 更新目標
 router.delete("/deleteGoal/:goalId", verifyAuth, deleteGoal); // 刪除目標
 
-// 添加點讚相關路由
-router.post("/likeGoal/:goalId", verifyAuth, toggleGoalLike);    // 新增：切換目標的點讚狀態
-
-// 進度相關路由
-// router.post("/:goalId/progress", verifyAuth, createProgress);
-// router.patch("/:goalId/progress/:progressId", verifyAuth, updateProgress);
-// router.delete("/:goalId/progress/:progressId", verifyAuth, deleteProgress);
+// 點讚相關路由
+router.post("/likeGoal/:goalId", verifyAuth, toggleGoalLike); // 新增：切換目標的點讚狀態
 
 // 留言相關路由
-// router.post("/:goalId/comments", verifyAuth, createComment);
-// router.post("/:goalId/progress/:progressId/comments", verifyAuth, createComment);
-// router.patch("/comments/:commentId", verifyAuth, updateComment);
-// router.delete("/comments/:commentId", verifyAuth, deleteComment);
-  
-export default router; 
+router.post("/createComment/:goalId", verifyAuth, createComment); // 創建留言或回覆
+router.get("/getComments/:goalId", verifyAuth, getComments); // 獲取留言列表
+router.put("/updateComment/:commentId", verifyAuth, updateComment); // 更新留言
+router.delete("/deleteComment/:commentId", verifyAuth, deleteComment); // 刪除留言
+
+export default router;

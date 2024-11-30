@@ -56,4 +56,5 @@ export default {
   comment: {
     fetchSuccess: "獲取留言列表成功",
   },
+  serverError: "伺服器錯誤，請稍後再試",
 };

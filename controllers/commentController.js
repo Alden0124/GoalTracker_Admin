@@ -6,7 +6,8 @@ import { getMessage } from "../utils/i18n.js";
 export const createComment = async (req, res) => {
   try {
     const { goalId } = req.params;
-    const { content, parentId, type = "comment" } = req.body;
+    const { content, parentId } = req.body;
+    let { type = "comment" } = req.body;
     const userId = req.user.userId;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
@@ -87,16 +88,15 @@ export const getComments = async (req, res) => {
     const query = {
       goal: goalId,
       type,
-      parentId: parentId || null, // 如果沒有 parentId，獲取頂層留言
+      parentId: parentId || null,
     };
-
-    const skip = (Number(page) - 1) * Number(limit);
 
     const comments = await Comment.find(query)
       .populate("user", "username avatar")
       .populate("parentId", "content user")
+      .select("content createdAt updatedAt user parentId type replyCount")
       .sort("-createdAt")
-      .skip(skip)
+      .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
     const total = await Comment.countDocuments(query);

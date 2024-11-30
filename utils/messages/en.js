@@ -57,4 +57,5 @@ export default {
   comment: {
     fetchSuccess: "Fetch comments successfully",
   },
+  serverError: "Server error, please try again later",
 };

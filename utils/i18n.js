@@ -1,16 +1,16 @@
-import zhTW from './messages/zh-TW.js';
-import en from './messages/en.js';
+import en from "./messages/en.js";
+import zhTW from "./messages/zh-TW.js";
 
 const messages = {
-  'zh-TW': zhTW,
-  'en-US': en
+  "zh-TW": zhTW,
+  "en-US": en,
 };
 
-export const getMessage = (key, lang = 'zh-TW', params = {}) => {
+export const getMessage = (key, lang = "zh-TW", params = {}) => {
   try {
-    const langMessages = messages[lang] || messages['zh-TW'];
-    const value = key.split('.').reduce((obj, k) => obj?.[k], langMessages);
-    
+    const langMessages = messages[lang] || messages["zh-TW"];
+    const value = key.split(".").reduce((obj, k) => obj?.[k], langMessages);
+
     if (!value) {
       console.warn(`Translation key not found: ${key}`);
       return key;
@@ -21,7 +21,7 @@ export const getMessage = (key, lang = 'zh-TW', params = {}) => {
       value
     );
   } catch (error) {
-    console.error('Translation error:', error);
+    console.error("Translation error:", error);
     return key;
   }
-}; 
+};

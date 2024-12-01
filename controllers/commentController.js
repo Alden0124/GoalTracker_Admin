@@ -85,17 +85,25 @@ export const getComments = async (req, res) => {
     const { page = 1, limit = 10, parentId, type = "comment" } = req.query;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
+    // 修改查询条件，确保能正确获取所有评论或回复
     const query = {
       goal: goalId,
       type,
-      parentId: parentId || null,
     };
+
+    // 如果指定了 parentId，则获取该评论的所有回复
+    // 如果没有指定 parentId，则只获取顶层评论（parentId 为 null 的评论）
+    if (parentId) {
+      query.parentId = parentId;
+    } else {
+      query.parentId = null;
+    }
 
     const comments = await Comment.find(query)
       .populate("user", "username avatar")
       .populate("parentId", "content user")
       .select("content createdAt updatedAt user parentId type replyCount")
-      .sort("-createdAt")
+      .sort("createdAt")
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
@@ -190,29 +198,47 @@ export const deleteComment = async (req, res) => {
         .json({ message: getMessage("comment.unauthorized", lang) });
     }
 
-    // 如果有子回覆，不允許刪除
-    if (comment.replyCount > 0) {
-      return res
-        .status(400)
-        .json({ message: getMessage("comment.hasReplies", lang) });
-    }
+    // 開始事務處理
+    const session = await Comment.startSession();
+    await session.withTransaction(async () => {
+      // 如果是父留言且有回覆，先刪除所有子回覆
+      if (comment.replyCount > 0) {
+        // 獲取所有子回覆
+        const replies = await Comment.find({ parentId: commentId });
+        const replyCount = replies.length;
 
-    await comment.deleteOne();
+        // 刪除所有子回覆
+        await Comment.deleteMany({ parentId: commentId });
 
-    // 如果是回覆，更新父留言的回覆計數
-    if (comment.parentId) {
-      await Comment.findByIdAndUpdate(comment.parentId, {
-        $inc: { replyCount: -1 },
+        // 更新目標的留言計數（減去所有子回覆）
+        await Goal.findByIdAndUpdate(comment.goal, {
+          $inc:
+            comment.type === "progress"
+              ? { progressCommentCount: -replyCount }
+              : { commentCount: -replyCount },
+        });
+      }
+
+      // 刪除當前留言
+      await comment.deleteOne();
+
+      // 如果是回覆，更新父留言的回覆計數
+      if (comment.parentId) {
+        await Comment.findByIdAndUpdate(comment.parentId, {
+          $inc: { replyCount: -1 },
+        });
+      }
+
+      // 更新目標的留言計數（減去當前留言）
+      await Goal.findByIdAndUpdate(comment.goal, {
+        $inc:
+          comment.type === "progress"
+            ? { progressCommentCount: -1 }
+            : { commentCount: -1 },
       });
-    }
-
-    // 更新目標的留言計數
-    await Goal.findByIdAndUpdate(comment.goal, {
-      $inc:
-        comment.type === "progress"
-          ? { progressCommentCount: -1 }
-          : { commentCount: -1 },
     });
+
+    await session.endSession();
 
     res.json({ message: getMessage("comment.deleteSuccess", lang) });
   } catch (error) {

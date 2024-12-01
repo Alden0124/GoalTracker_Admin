@@ -201,26 +201,21 @@ export const deleteComment = async (req, res) => {
     // 開始事務處理
     const session = await Comment.startSession();
     await session.withTransaction(async () => {
+      let totalDeletedCount = 0; // 追踪被刪除的評論總數
+
       // 如果是父留言且有回覆，先刪除所有子回覆
       if (comment.replyCount > 0) {
         // 獲取所有子回覆
         const replies = await Comment.find({ parentId: commentId });
-        const replyCount = replies.length;
+        totalDeletedCount += replies.length;
 
         // 刪除所有子回覆
         await Comment.deleteMany({ parentId: commentId });
-
-        // 更新目標的留言計數（減去所有子回覆）
-        await Goal.findByIdAndUpdate(comment.goal, {
-          $inc:
-            comment.type === "progress"
-              ? { progressCommentCount: -replyCount }
-              : { commentCount: -replyCount },
-        });
       }
 
       // 刪除當前留言
       await comment.deleteOne();
+      totalDeletedCount += 1; // 加上當前被刪除的評論
 
       // 如果是回覆，更新父留言的回覆計數
       if (comment.parentId) {
@@ -229,12 +224,12 @@ export const deleteComment = async (req, res) => {
         });
       }
 
-      // 更新目標的留言計數（減去當前留言）
+      // 一次性更新目標的留言計數（包含所有被刪除的評論）
       await Goal.findByIdAndUpdate(comment.goal, {
         $inc:
           comment.type === "progress"
-            ? { progressCommentCount: -1 }
-            : { commentCount: -1 },
+            ? { progressCommentCount: -totalDeletedCount }
+            : { commentCount: -totalDeletedCount },
       });
     });
 

@@ -3,6 +3,7 @@ import {
   createComment,
   deleteComment,
   getComments,
+  toggleCommentLike,
   updateComment,
 } from "../controllers/commentController.js";
 import {
@@ -26,6 +27,7 @@ router.delete("/deleteGoal/:goalId", verifyAuth, deleteGoal); // 刪除目標
 
 // 點讚相關路由
 router.post("/likeGoal/:goalId", verifyAuth, toggleGoalLike); // 新增：切換目標的點讚狀態
+router.post("/likeComment/:commentId", verifyAuth, toggleCommentLike); // 新增：切換留言的點讚狀態
 
 // 留言相關路由
 router.post("/createComment/:goalId", verifyAuth, createComment); // 創建留言或回覆

@@ -83,6 +83,7 @@ export const getComments = async (req, res) => {
   try {
     const { goalId } = req.params;
     const { page = 1, limit = 10, parentId, type = "comment" } = req.query;
+    const userId = req.user.userId; // 獲取當前用戶ID
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
     // 修改查询条件，确保能正确获取所有评论或回复
@@ -102,15 +103,25 @@ export const getComments = async (req, res) => {
     const comments = await Comment.find(query)
       .populate("user", "username avatar")
       .populate("parentId", "content user")
-      .select("content createdAt updatedAt user parentId type replyCount")
+      .select("content createdAt updatedAt user parentId type replyCount likes")
       .sort("createdAt")
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
+    // 添加 isLiked 和 likeCount 信息
+    const commentsWithLikes = comments.map((comment) => {
+      const commentObj = comment.toObject();
+      return {
+        ...commentObj,
+        isLiked: comment.likes.includes(userId),
+        likeCount: comment.likes.length,
+      };
+    });
+
     const total = await Comment.countDocuments(query);
 
     res.json({
-      comments,
+      comments: commentsWithLikes,
       pagination: {
         current: Number(page),
         size: Number(limit),
@@ -238,6 +249,59 @@ export const deleteComment = async (req, res) => {
     res.json({ message: getMessage("comment.deleteSuccess", lang) });
   } catch (error) {
     console.error("刪除留言錯誤:", error);
+    const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
+    res.status(500).json({ message: getMessage("serverError", lang) });
+  }
+};
+
+// 切換留言點讚狀態
+export const toggleCommentLike = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const { isLiked } = req.body; // 從請求體中獲取點讚狀態
+    const userId = req.user.userId;
+    const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
+
+    // 檢查留言是否存在
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res
+        .status(404)
+        .json({ message: getMessage("comment.notFound", lang) });
+    }
+
+    // 檢查當前點讚狀態
+    const hasLiked = comment.likes.includes(userId);
+
+    // 根據請求的狀態進行更新
+    if (isLiked && !hasLiked) {
+      // 添加點讚
+      comment.likes.push(userId);
+      await comment.save();
+      res.json({
+        message: getMessage("comment.likeSuccess", lang),
+        liked: true,
+        likeCount: comment.likes.length,
+      });
+    } else if (!isLiked && hasLiked) {
+      // 取消點讚
+      comment.likes = comment.likes.filter((id) => id.toString() !== userId);
+      await comment.save();
+      res.json({
+        message: getMessage("comment.unlikeSuccess", lang),
+        liked: false,
+        likeCount: comment.likes.length,
+      });
+    } else {
+      // 當前狀態已經符合請求，直接返回
+      res.json({
+        message: getMessage("comment.noChange", lang),
+        liked: isLiked,
+        likeCount: comment.likes.length,
+      });
+    }
+  } catch (error) {
+    console.error("切換留言點讚狀態錯誤:", error);
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
     res.status(500).json({ message: getMessage("serverError", lang) });
   }

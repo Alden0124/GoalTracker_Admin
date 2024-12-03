@@ -18,7 +18,7 @@ const app = express();
 // CORS 配置
 const allowedOrigins = [
   "http://localhost:10000",
-  "https://goaltracker-web.onrender.com",
+  "https://goaltracker-frontend.onrender.com",
 ];
 
 app.use(
@@ -44,7 +44,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:", "http:"],
-        connectSrc: ["'self'", "https://goaltracker-web.onrender.com"],
+        connectSrc: ["'self'", "https://goaltracker-frontend.onrender.com"],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
       },

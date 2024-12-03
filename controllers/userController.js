@@ -1,100 +1,142 @@
+import axios from "axios";
+import { upload } from "../config/cloudinary.js";
+import { handleMulterError } from "../middleware/errorHandler.js";
+import Follow from "../models/followModel.js";
 import User from "../models/userModel.js";
-import { sendVerificationEmail } from "../config/nodemailer.js";
 import {
   deleteCloudinaryImage,
-  handleUploadError,
   getPublicIdFromUrl,
+  handleUploadError,
 } from "../utils/cloudinaryHelper.js";
-import axios from "axios";
 
-export const sendVerificationCode = async (req, res) => {
+export const updateUserProfile = async (req, res) => {
   try {
-    const { email } = req.body;
-    const verificationCode = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await User.findOneAndUpdate(
-      { email },
-      {
-        verificationCode: {
-          code: verificationCode,
-          expiresAt,
-        },
-      },
-      { upsert: true }
+    // 詳細的請求日誌
+    console.log("===== 開始更新用戶資料 =====");
+    console.log("請求體:", {
+      username: req.body.username,
+      location: req.body.location,
+      occupation: req.body.occupation,
+      education: req.body.education,
+    });
+    console.log(
+      "文件信息:",
+      req.file
+        ? {
+            fieldname: req.file.fieldname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+          }
+        : "No file uploaded"
     );
+    console.log("用戶ID:", req.user?.userId);
 
-    const isEmailSent = await sendVerificationEmail(email, verificationCode);
-
-    if (!isEmailSent) {
-      return res.status(500).json({ message: "驗證碼發送失敗" });
+    // 檢查必要的參數
+    if (!req.user?.userId) {
+      console.error("缺少用戶ID");
+      return res.status(400).json({ message: "缺少用戶ID" });
     }
 
-    res.json({ message: "驗證碼已發送到您的郵箱" });
-  } catch (error) {
-    console.error("發送驗證碼錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
-  }
-};
+    // 從請求體中解構需要更新的欄位
+    const { username, location, occupation, education } = req.body;
+    const userId = req.user.userId;
 
-export const verifyCode = async (req, res) => {
-  try {
-    const { email, code } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user || !user.verificationCode) {
-      return res.status(400).json({ message: "驗證碼無效" });
-    }
-
-    if (Date.now() > user.verificationCode.expiresAt) {
-      return res.status(400).json({ message: "驗證碼已過期" });
-    }
-
-    if (user.verificationCode.code !== code) {
-      return res.status(400).json({ message: "驗證碼不正確" });
-    }
-
-    user.isEmailVerified = true;
-    user.verificationCode = undefined;
-    await user.save();
-
-    res.json({ message: "郵箱驗證成功" });
-  } catch (error) {
-    console.error("驗證碼驗證錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
-  }
-};
-
-export const updateAvatar = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId);
+    // 檢查用戶是否存在
+    const user = await User.findById(userId);
     if (!user) {
-      await handleUploadError(req.file);
+      console.error(`用戶不存在: ${userId}`);
+      if (req.file) await handleUploadError(req.file);
       return res.status(404).json({ message: "用戶不存在" });
     }
 
-    // 如果用戶已有頭像，先刪除舊的
-    if (user.avatar) {
-      const oldPublicId = getPublicIdFromUrl(user.avatar);
-      if (oldPublicId) {
-        await deleteCloudinaryImage(oldPublicId);
+    // 處理頭像上傳
+    if (req.file) {
+      try {
+        console.log("開始處理頭像上傳:", {
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          path: req.file.path,
+        });
+
+        if (user.avatar && user.avatar !== user.thirdPartyAvatar) {
+          const oldPublicId = getPublicIdFromUrl(user.avatar);
+          if (oldPublicId) {
+            console.log("刪除舊頭像:", oldPublicId);
+            await deleteCloudinaryImage(oldPublicId);
+          }
+        }
+        user.avatar = req.file.path;
+        console.log("新頭像設置成功:", req.file.path);
+      } catch (uploadError) {
+        console.error("頭像處理錯誤:", {
+          error: uploadError,
+          stack: uploadError.stack,
+          file: req.file,
+        });
+        await handleUploadError(req.file);
+        return res.status(500).json({
+          message: "頭像上傳失敗",
+          error: uploadError.message,
+        });
       }
     }
 
-    // 更新新的頭像
-    user.avatar = req.file ? req.file.path : user.avatar;
-    await user.save();
+    // 準備要更新的欄位
+    const updates = {};
+    if (username !== undefined) updates.username = username;
+    if (location !== undefined) updates.location = location;
+    if (occupation !== undefined) updates.occupation = occupation;
+    if (education !== undefined) updates.education = education;
+    if (user.avatar) updates.avatar = user.avatar;
+
+    console.log("準備更新的欄位:", updates);
+
+    // 執行資料庫更新操作
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      throw new Error("更新用戶資料失敗");
+    }
 
     res.json({
-      message: "頭像更新成功",
-      avatar: user.avatar,
+      message: "用戶資料更新成功",
+      user: {
+        id: updatedUser._id,
+        username: updatedUser.username,
+        location: updatedUser.location,
+        occupation: updatedUser.occupation,
+        education: updatedUser.education,
+        avatar: updatedUser.avatar,
+        thirdPartyAvatar: updatedUser.thirdPartyAvatar,
+        email: updatedUser.email,
+        providers: updatedUser.providers,
+      },
     });
   } catch (error) {
-    await handleUploadError(req.file);
-    console.error("更新頭像錯誤:", error);
-    res.status(500).json({ message: "伺服器錯誤" });
+    // 改進錯誤處理
+    console.error("更新用戶資料錯誤:", {
+      message: error.message,
+      stack: error.stack,
+      details: error,
+    });
+
+    if (req.file) {
+      try {
+        await handleUploadError(req.file);
+      } catch (cleanupError) {
+        console.error("清理上傳文件失敗:", cleanupError);
+      }
+    }
+
+    res.status(500).json({
+      message: "更新用戶資料失敗",
+      error: error.message,
+    });
   }
 };
 
@@ -105,7 +147,6 @@ export const syncUserProfile = async (user) => {
     if (user.providers.includes("line")) {
       const lineTokens = user.providerTokens?.line;
 
-      // 檢查 token 是否有效
       if (lineTokens && new Date(lineTokens.expiresAt) > new Date()) {
         const lineResponse = await axios.get("https://api.line.me/v2/profile", {
           headers: {
@@ -115,9 +156,20 @@ export const syncUserProfile = async (user) => {
 
         // 更新用戶資料
         const updates = {
-          username: lineResponse.data.displayName,
-          avatar: lineResponse.data.pictureUrl,
+          oauthName: lineResponse.data.displayName,
         };
+
+        // 處理頭像邏輯
+        if (lineResponse.data.pictureUrl) {
+          // 如果是第一次設置第三方頭像或目前沒有第三方頭像
+          if (!user.thirdPartyAvatar) {
+            updates.thirdPartyAvatar = lineResponse.data.pictureUrl;
+            // 如果用戶沒有設置自定義頭像，使用第三方頭像
+            if (!user.avatar) {
+              updates.avatar = lineResponse.data.pictureUrl;
+            }
+          }
+        }
 
         // 只更新有變化的欄位
         const needsUpdate = Object.keys(updates).some(
@@ -148,10 +200,20 @@ export const syncUserProfile = async (user) => {
           );
 
           const updates = {
-            username: googleResponse.data.name,
-            avatar: googleResponse.data.picture,
-            email: googleResponse.data.email,
+            oauthName: googleResponse.data.name,
           };
+
+          // 處理頭像邏輯
+          if (googleResponse.data.picture) {
+            // 如果是第一次設置第三方頭像或目前沒有第三方頭像
+            if (!user.thirdPartyAvatar) {
+              updates.thirdPartyAvatar = googleResponse.data.picture;
+              // 如果用戶沒有設置自定義頭像，使用第三方頭像
+              if (!user.avatar) {
+                updates.avatar = googleResponse.data.picture;
+              }
+            }
+          }
 
           // 只更新有變化的欄位
           const needsUpdate = Object.keys(updates).some(
@@ -216,13 +278,23 @@ export const getCurrentUser = async (req, res) => {
     // 同步用戶資料
     user = await syncUserProfile(user);
 
+    // 獲取粉絲和追蹤數
+    const followersCount = await Follow.countDocuments({ following: user._id });
+    const followingCount = await Follow.countDocuments({ follower: user._id });
+
     res.json({
       user: {
-        _id: user._id,
+        id: user._id,
         username: user.username,
         avatar: user.avatar,
+        location: user.location || "",
+        occupation: user.occupation || "",
+        education: user.education || "",
+        thirdPartyAvatar: user.thirdPartyAvatar,
         email: user.email,
         providers: user.providers,
+        followersCount,
+        followingCount,
       },
     });
   } catch (error) {
@@ -231,69 +303,201 @@ export const getCurrentUser = async (req, res) => {
   }
 };
 
-export const syncProfile = async (req, res) => {
+// 更新avater
+export const updateAvatar = async (req, res, next) => {
+  upload.single("avatar")(req, res, (err) => {
+    if (err) {
+      console.error("Multer 錯誤:", err);
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+};
+
+// 新增：根據userId獲取用戶資料
+export const getUserById = async (req, res) => {
   try {
-    let user = await User.findById(req.user.userId);
+    const { userId } = req.params;
+    const currentUserId = req.user?.userId;
+
+    // 添加 ObjectId 格式驗證
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "無效的用戶ID格式" });
+    }
+
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "用戶不存在" });
     }
 
-    // 同步用戶資料
-    user = await syncUserProfile(user);
-    user.lastSyncAt = new Date();
-    await user.save();
+    // 獲取粉絲和追蹤數
+    const followersCount = await Follow.countDocuments({ following: userId });
+    const followingCount = await Follow.countDocuments({ follower: userId });
+
+    // 檢查當前用戶是否已追蹤此用戶
+    let isFollowing = false;
+    if (currentUserId) {
+      const followExists = await Follow.findOne({
+        follower: currentUserId,
+        following: userId,
+      });
+      isFollowing = !!followExists;
+    }
 
     res.json({
-      message: "用戶資料同步成功",
       user: {
-        _id: user._id,
+        id: user._id,
         username: user.username,
         avatar: user.avatar,
-        email: user.email,
-        providers: user.providers,
+        location: user.location || "",
+        occupation: user.occupation || "",
+        education: user.education || "",
+        followersCount,
+        followingCount,
+        isFollowing, // 新增欄位
       },
     });
   } catch (error) {
-    console.error("同步用戶資料錯誤:", error);
+    console.error("獲取用戶資訊錯誤:", error);
     res.status(500).json({ message: "伺服器錯誤" });
   }
 };
 
-export const addEmail = async (req, res) => {
+// 追蹤用戶
+export const followUser = async (req, res) => {
   try {
-    const { email } = req.body;
-    const user = await User.findById(req.user.userId);
+    const followerId = req.user.userId; // 當前登入用戶
+    const followingId = req.params.userId; // 要追蹤的用戶
 
-    // 檢查 email 是否已被使用
-    const existingUser = await User.findOne({ email });
-    if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-      return res.status(400).json({ message: "此電子郵件已被使用" });
+    // 檢查是否追蹤自己
+    if (followerId === followingId) {
+      return res.status(400).json({ message: "不能追蹤自己" });
     }
 
-    // 生成驗證碼
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    user.email = email;
-    user.verificationCode = {
-      code: verificationCode,
-      expiresAt
-    };
-    user.isEmailVerified = false;
-    await user.save();
-
-    // 發送驗證郵件
-    const isEmailSent = await sendVerificationEmail(email, verificationCode);
-    if (!isEmailSent) {
-      return res.status(500).json({ message: "驗證碼發送失敗" });
+    // 檢查要追蹤的用戶是否存在
+    const followingUser = await User.findById(followingId);
+    if (!followingUser) {
+      return res.status(404).json({ message: "用戶不存在" });
     }
 
-    res.json({ 
-      message: "驗證碼已發送到您的郵箱",
-      email: email
+    // 創建追蹤關係
+    await Follow.create({
+      follower: followerId,
+      following: followingId,
+    });
+
+    res.status(200).json({ message: "追蹤成功" });
+  } catch (error) {
+    if (error.code === 11000) {
+      // MongoDB 重複鍵錯誤
+      return res.status(400).json({ message: "已經追蹤過此用戶" });
+    }
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 取消追蹤
+export const unfollowUser = async (req, res) => {
+  try {
+    const followerId = req.user.userId;
+    const followingId = req.params.userId;
+
+    await Follow.findOneAndDelete({
+      follower: followerId,
+      following: followingId,
+    });
+
+    res.status(200).json({ message: "取消追蹤成功" });
+  } catch (error) {
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 獲取用戶的追蹤者列表
+export const getFollowers = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const followers = await Follow.find({ following: userId })
+      .populate("follower", "username avatar _id")
+      .sort({ createdAt: -1 });
+
+    const followersList = followers.map((f) => ({
+      id: f.follower._id,
+      username: f.follower.username,
+      avatar: f.follower.avatar,
+    }));
+
+    res.json({
+      followers: followersList,
+      total: followersList.length,
     });
   } catch (error) {
-    console.error("添加 email 錯誤:", error);
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 獲取用戶的追蹤列表
+export const getFollowing = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const following = await Follow.find({ follower: userId })
+      .populate("following", "username avatar _id")
+      .sort({ createdAt: -1 });
+
+    const followingList = following.map((f) => ({
+      id: f.following._id,
+      username: f.following.username,
+      avatar: f.following.avatar,
+    }));
+
+    res.json({
+      following: followingList,
+      total: followingList.length,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "伺服器錯誤" });
+  }
+};
+
+// 移除粉絲
+export const removeFollower = async (req, res) => {
+  try {
+    const currentUserId = req.user.userId; // 當前登入的用戶
+    const targetUserId = req.params.userId; // 要操作的用戶頁面
+    const followerId = req.params.followerId; // 要移除的粉絲
+
+    // 檢查是否有權限（只能在自己的頁面移除粉絲）
+    if (currentUserId !== targetUserId) {
+      return res.status(403).json({ message: "您沒有權限執行此操作" });
+    }
+
+    console.log("正在檢查追蹤關係:", {
+      follower: followerId,
+      following: currentUserId,
+    });
+
+    const followRelation = await Follow.findOne({
+      follower: followerId,
+      following: currentUserId,
+    });
+
+    console.log("查詢結果:", followRelation);
+
+    if (!followRelation) {
+      return res.status(400).json({ message: "此用戶並不是您的粉絲" });
+    }
+
+    // 移除追蹤關係
+    await Follow.findOneAndDelete({
+      follower: followerId,
+      following: currentUserId,
+    });
+
+    res.status(200).json({ message: "已成功移除粉絲" });
+  } catch (error) {
+    console.error("移除粉絲錯誤:", error);
     res.status(500).json({ message: "伺服器錯誤" });
   }
 };

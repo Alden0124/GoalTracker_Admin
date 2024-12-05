@@ -72,7 +72,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/verification", verificationRouter);
 app.use("/api/goals", goalsRouter);
-app.use("/api/feed", feedRoutes);
+app.use("/api/feeds", feedRoutes);
 
 // Swagger 文檔
 if (process.env.NODE_ENV !== "production") {

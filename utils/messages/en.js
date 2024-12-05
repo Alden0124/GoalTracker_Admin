@@ -57,5 +57,10 @@ export default {
   comment: {
     fetchSuccess: "Fetch comments successfully",
   },
+  feed: {
+    suggestionsSuccess: "Fetch search suggestions successfully",
+    searchSuccess: "Fetch search results successfully",
+    recommendedUsersSuccess: "Fetch recommended users successfully",
+  },
   serverError: "Server error, please try again later",
 };

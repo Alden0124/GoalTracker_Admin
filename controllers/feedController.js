@@ -189,12 +189,14 @@ export const getRecommendedUsers = async (req, res) => {
     // 處理每個用戶的額外信息
     const usersWithExtra = await Promise.all(
       users.map(async (user) => {
-        // 獲取用戶的目標數量
-        const [goalCount, followerCount, followingCount] = await Promise.all([
-          Goal.countDocuments({ user: user._id }),
-          Follow.countDocuments({ following: user._id }),
-          Follow.countDocuments({ follower: user._id }),
-        ]);
+        // 獲取用戶的目標數量和其他統計
+        const [goalCount, followerCount, followingCount, isFollowing] =
+          await Promise.all([
+            Goal.countDocuments({ user: user._id }),
+            Follow.countDocuments({ following: user._id }),
+            Follow.countDocuments({ follower: user._id }),
+            Follow.exists({ follower: userId, following: user._id }),
+          ]);
 
         // 計算推薦分數
         const score = goalCount + followerCount + followingCount * 0.5;
@@ -208,6 +210,7 @@ export const getRecommendedUsers = async (req, res) => {
           followingCount,
           goalCount,
           score,
+          isFollowing: !!isFollowing,
         };
       })
     );
@@ -240,18 +243,14 @@ export const getSearchSuggestions = async (req, res) => {
     const { q = "", limit = 5, type = "all" } = req.query;
     const lang = req.headers["accept-language"]?.split(",")[0] || "zh-TW";
 
-    // 如果搜尋詞少於2個字符，返回空結果
-    if (q.length < 2) {
-      return res.json({
-        suggestions: [],
-        message: getMessage("feed.suggestionsSuccess", lang),
-      });
-    }
+    // 初始化返回結構，確保包含空陣列
+    let suggestions = {
+      goals: [],
+      users: [],
+    };
 
     // 清理搜索關鍵字
     const cleanQuery = q.replace(/['"]+/g, "");
-
-    let suggestions = {};
 
     // 根據type參數決定搜索範圍
     if (type === "all" || type === "goal") {

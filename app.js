@@ -8,6 +8,7 @@ import { connectDB } from "./config/database.js";
 import { initializeMailer } from "./config/nodemailer.js";
 import { specs } from "./config/swagger.js";
 import authRouter from "./routes/auth.js";
+import chatRouter from "./routes/chat.js";
 import feedRoutes from "./routes/feed.js";
 import goalsRouter from "./routes/goals.js";
 import userRouter from "./routes/user.js";
@@ -73,6 +74,7 @@ app.use("/api/users", userRouter);
 app.use("/api/verification", verificationRouter);
 app.use("/api/goals", goalsRouter);
 app.use("/api/feeds", feedRoutes);
+app.use("/api/chat", chatRouter);
 
 // Swagger 文檔
 if (process.env.NODE_ENV !== "production") {
@@ -129,7 +131,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 移除立即執行的 initializeApp
+// 修改初始化函數
 const initializeApp = async () => {
   try {
     // 連接數據庫
@@ -146,6 +148,6 @@ const initializeApp = async () => {
   }
 };
 
-// 導出 initializeApp 供 bin/www 使用
+// 導出 app 和初始化函數
 export { initializeApp };
 export default app;

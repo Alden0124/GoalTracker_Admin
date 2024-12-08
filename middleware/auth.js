@@ -1,6 +1,15 @@
 import jwt from "jsonwebtoken";
 import User from '../models/userModel.js';
 
+// 將 verifyJWT 函數導出
+export const verifyJWT = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+};
+
 export const verifyAuth = async (req, res, next) => {
   try {
     // 從 header 獲取 token

@@ -56,5 +56,10 @@ export default {
   comment: {
     fetchSuccess: "獲取留言列表成功",
   },
+  feed: {
+    suggestionsSuccess: "獲取搜尋建議成功",
+    searchSuccess: "搜尋動態牆成功",
+    recommendedUsersSuccess: "獲取推薦用戶列表成功",
+  },
   serverError: "伺服器錯誤，請稍後再試",
 };

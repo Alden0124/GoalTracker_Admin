@@ -8,6 +8,7 @@ import { connectDB } from "./config/database.js";
 import { initializeMailer } from "./config/nodemailer.js";
 import { specs } from "./config/swagger.js";
 import authRouter from "./routes/auth.js";
+import chatRouter from "./routes/chat.js";
 import feedRoutes from "./routes/feed.js";
 import goalsRouter from "./routes/goals.js";
 import userRouter from "./routes/user.js";
@@ -18,7 +19,7 @@ const app = express();
 // CORS 配置
 const allowedOrigins = [
   "http://localhost:10000",
-  "https://goaltracker-web.onrender.com",
+  "https://goaltracker-frontend.onrender.com",
 ];
 
 app.use(
@@ -37,16 +38,6 @@ app.use(
   })
 );
 
-// 添加額外的 CORS 標頭
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header("Access-Control-Allow-Credentials", "true");
-  }
-  next();
-});
-
 // 安全性配置
 app.use(
   helmet({
@@ -54,7 +45,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:", "http:"],
-        connectSrc: ["'self'", "https://goaltracker-web.onrender.com"],
+        connectSrc: ["'self'", "https://goaltracker-frontend.onrender.com"],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
       },
@@ -82,7 +73,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/verification", verificationRouter);
 app.use("/api/goals", goalsRouter);
-app.use("/api/feed", feedRoutes);
+app.use("/api/feeds", feedRoutes);
+app.use("/api/chat", chatRouter);
 
 // Swagger 文檔
 if (process.env.NODE_ENV !== "production") {
@@ -139,7 +131,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 移除立即執行的 initializeApp
+// 修改初始化函數
 const initializeApp = async () => {
   try {
     // 連接數據庫
@@ -156,6 +148,6 @@ const initializeApp = async () => {
   }
 };
 
-// 導出 initializeApp 供 bin/www 使用
+// 導出 app 和初始化函數
 export { initializeApp };
 export default app;

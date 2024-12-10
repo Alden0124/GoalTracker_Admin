@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import ChatMessage from "../models/chatMessageModel.js";
 
 export const getChatHistory = async (req, res) => {
@@ -27,37 +28,128 @@ export const getChatHistory = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .populate("sender", "username avatar")  // 填充發送者資料
+      .populate("sender", "username avatar") // 填充發送者資料
       .lean();
 
     // 格式化訊息
     const formattedMessages = messages.map((msg) => ({
-      id: msg._id,                // 訊息ID
-      content: msg.content,       // 訊息內容
-      timestamp: msg.createdAt,   // 時間戳
+      id: msg._id, // 訊息ID
+      content: msg.content, // 訊息內容
+      timestamp: msg.createdAt, // 時���戳
       sender: {
-        id: msg.sender._id,       // 發送者ID
-        username: msg.sender.username,  // 發送者名稱
-        avatar: msg.sender.avatar || null,  // 發送者頭像
+        id: msg.sender._id, // 發送者ID
+        username: msg.sender.username, // 發送者名稱
+        avatar: msg.sender.avatar || null, // 發送者頭像
       },
-      isCurrentUser: msg.sender._id.toString() === userId  // 是否為當前用戶發送的訊息
+      isCurrentUser: msg.sender._id.toString() === userId, // 是否為當前用戶發送的訊息
     }));
 
     res.json({
-      messages: formattedMessages.reverse(),  // 反轉順序，最舊的訊息在前
+      messages: formattedMessages.reverse(), // 反轉順序，最舊的訊息在前
       pagination: {
         total,
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit)
-      }
+        hasMore: page < Math.ceil(total / limit),
+      },
     });
-
   } catch (error) {
     console.error("獲取聊天記錄錯誤:", error);
     res.status(500).json({
       message: "獲取聊天記錄失敗",
       error: error.message,
+    });
+  }
+};
+
+export const getConversationsList = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // 獲取最近的對話列表
+    const conversations = await ChatMessage.aggregate([
+      // 匹配當前用戶的所有對話
+      {
+        $match: {
+          $or: [
+            { sender: userObjectId },
+            { recipient: userObjectId }
+          ]
+        }
+      },
+      // 按照對話分組，獲取最新消息
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$sender", userObjectId] },
+              "$recipient",
+              "$sender"
+            ]
+          },
+          lastMessage: { $first: "$$ROOT" },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$recipient", userObjectId] },
+                    { $eq: ["$read", false] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      // 關聯用戶信息
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "userInfo"
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          lastMessage: 1,
+          unreadCount: 1,
+          userInfo: { $arrayElemAt: ["$userInfo", 0] }
+        }
+      },
+      { $sort: { "lastMessage.createdAt": -1 } }
+    ]);
+
+    // 格式化返回數據
+    const formattedConversations = conversations.map(conv => ({
+      userId: conv._id,
+      username: conv.userInfo.username,
+      avatar: conv.userInfo.avatar,
+      lastMessage: {
+        content: conv.lastMessage.content,
+        timestamp: conv.lastMessage.createdAt,
+        isRead: conv.lastMessage.read
+      },
+      unreadCount: conv.unreadCount
+    }));
+
+    res.json({
+      conversations: formattedConversations
+    });
+
+  } catch (error) {
+    console.error("獲取對話列表錯誤:", error);
+    res.status(500).json({
+      message: "獲取對話列表失敗",
+      error: error.message
     });
   }
 };

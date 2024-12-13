@@ -11,6 +11,7 @@ import authRouter from "./routes/auth.js";
 import chatRouter from "./routes/chat.js";
 import feedRoutes from "./routes/feed.js";
 import goalsRouter from "./routes/goals.js";
+import notificationRouter from "./routes/notification.js";
 import userRouter from "./routes/user.js";
 import verificationRouter from "./routes/verification.js";
 
@@ -72,6 +73,7 @@ if (process.env.NODE_ENV !== "production") {
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/verification", verificationRouter);
+app.use("/api/notifications", notificationRouter);
 app.use("/api/goals", goalsRouter);
 app.use("/api/feeds", feedRoutes);
 app.use("/api/chat", chatRouter);

@@ -8,6 +8,7 @@ import {
   getPublicIdFromUrl,
   handleUploadError,
 } from "../utils/cloudinaryHelper.js";
+import { sendNotification } from "./socketController.js";
 
 export const updateUserProfile = async (req, res) => {
   try {
@@ -384,6 +385,13 @@ export const followUser = async (req, res) => {
     await Follow.create({
       follower: followerId,
       following: followingId,
+    });
+
+    // 創建並發送通知
+    await sendNotification(req.app.get("io"), {
+      recipient: followingId,
+      sender: followerId,
+      type: "follow",
     });
 
     res.status(200).json({ message: "追蹤成功" });

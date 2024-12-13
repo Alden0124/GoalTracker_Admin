@@ -18,24 +18,34 @@ const client = new OAuth2Client(
   config.callbackURL
 );
 
-export const verifyGoogleToken = async (token) => {
+export const verifyGoogleToken = async (accessToken) => {
   try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: config.clientId
+    // 使用 access token 獲取用戶信息
+    const response = await client.getTokenInfo(accessToken);
+    
+    // 如果需要更詳細的用戶信息，可以調用 Google People API
+    const url = `https://www.googleapis.com/oauth2/v3/userinfo`;
+    const userInfoResponse = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
     
-    const payload = ticket.getPayload();
+    if (!userInfoResponse.ok) {
+      throw new Error('Failed to fetch user info');
+    }
+    
+    const userData = await userInfoResponse.json();
     
     return {
-      email: payload.email,
-      username: payload.name,
-      avatar: payload.picture,
-      providerId: payload.sub,
+      email: userData.email,
+      username: userData.name,
+      avatar: userData.picture,
+      providerId: userData.sub,
       provider: 'google'
     };
   } catch (error) {
     console.error('Google token 驗證錯誤:', error);
-    throw new Error('無效的 Google Token');
+    throw new Error('無效的 Google Access Token');
   }
-}; 
+};

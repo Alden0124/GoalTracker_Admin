@@ -1,6 +1,7 @@
 import Comment from "../models/commentModel.js";
 import Goal from "../models/goalModel.js";
 import { getMessage } from "../utils/i18n.js";
+import { sendNotification } from "./socketController.js";
 
 // 創建留言（支援一般留言、進度記錄和回覆）
 export const createComment = async (req, res) => {
@@ -48,11 +49,32 @@ export const createComment = async (req, res) => {
 
     await newComment.save();
 
+    // 評論通知
+    if (!parentId) {
+      await sendNotification(req.app.get("io"), {
+        recipient: goal.user, // 目標擁有者的ID
+        sender: userId, // 評論者的ID
+        type: "comment",
+        goal: goalId, // 被評論的目標ID
+        comment: newComment._id, // 評論的ID
+      });
+    }
+
     // 更新計數
     if (parentId) {
+      const parentComment = await Comment.findById(parentId);
+
       // 更新父留言的回覆計數
       await Comment.findByIdAndUpdate(parentId, {
         $inc: { replyCount: 1 },
+      });
+      // 回覆通知
+      await sendNotification(req.app.get("io"), {
+        recipient: parentComment.user, // 原評論者的ID
+        sender: userId, // 回覆者的ID
+        type: "reply",
+        goal: goalId, // 相關目標ID
+        comment: newComment._id, // 回覆評論的ID
       });
     }
 

@@ -29,6 +29,8 @@ async function startServer() {
     
     // 初始化 Socket.IO
     const io = initializeSocketIO(server);
+    // 將 io 實例存儲在 app 中
+    app.set('io', io);
     
     // 啟動服務器
     server.listen(port);

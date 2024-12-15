@@ -129,20 +129,30 @@ export const getConversationsList = async (req, res) => {
     ]);
 
     // 格式化返回數據
-    const formattedConversations = conversations.map(conv => ({
-      userId: conv._id,
-      username: conv.userInfo.username,
-      avatar: conv.userInfo.avatar,
-      lastMessage: {
-        content: conv.lastMessage.content,
-        timestamp: conv.lastMessage.createdAt,
-        isRead: conv.lastMessage.read
-      },
-      unreadCount: conv.unreadCount
-    }));
+    const formattedConversations = conversations
+      .map((conv) => {
+        // 如果找不到用戶資料,使用預設值
+        const userInfo = conv.userInfo || {
+          username: "已刪除的用戶",
+          avatar: null,
+        };
+
+        return {
+          userId: conv._id,
+          username: userInfo.username,
+          avatar: userInfo.avatar,
+          lastMessage: {
+            content: conv.lastMessage.content,
+            timestamp: conv.lastMessage.createdAt,
+            isRead: conv.lastMessage.read,
+          },
+          unreadCount: conv.unreadCount,
+        };
+      })
+      .filter((conv) => conv !== null);
 
     res.json({
-      conversations: formattedConversations
+      conversations: formattedConversations,
     });
 
   } catch (error) {

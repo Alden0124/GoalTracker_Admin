@@ -426,22 +426,40 @@ export const getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
 
+    // 使用 match 確保只獲取存在的用戶
     const followers = await Follow.find({ following: userId })
-      .populate("follower", "username avatar _id")
+      .populate({
+        path: "follower",
+        select: "username avatar _id",
+        match: { _id: { $exists: true } }, // 只獲取仍然存在的用戶
+      })
       .sort({ createdAt: -1 });
 
-    const followersList = followers.map((f) => ({
-      id: f.follower._id,
-      username: f.follower.username,
-      avatar: f.follower.avatar,
-    }));
+    // 過濾掉已刪除的用戶（populate 後為 null 的記錄）
+    const followersList = followers
+      .filter((f) => f.follower !== null) // 過濾掉已刪除的用戶
+      .map((f) => ({
+        id: f.follower._id,
+        username: f.follower.username,
+        avatar: f.follower.avatar,
+      }));
+
+    // 清理無效的關注記錄
+    const invalidFollows = followers.filter((f) => f.follower === null);
+    if (invalidFollows.length > 0) {
+      // 異步刪除無效記錄，不等待完成
+      Follow.deleteMany({
+        _id: { $in: invalidFollows.map((f) => f._id) },
+      }).catch((err) => console.error("清理無效關注記錄時出錯:", err));
+    }
 
     res.json({
       followers: followersList,
       total: followersList.length,
     });
   } catch (error) {
-    res.status(500).json({ message: "伺服器錯誤" });
+    console.error("獲取追蹤者列表錯誤:", error);
+    res.status(500).json({ message: "獲取追蹤者列表失敗" });
   }
 };
 

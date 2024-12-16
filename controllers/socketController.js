@@ -126,7 +126,7 @@ const handleSendMessage = async (socket, io, data) => {
 
     // 構建訊息對象 (加入 avatar)
     const messageData = {
-      messageId: message._id,
+      id: message._id,
       sender: {
         id: senderId,
         username: sender.username,

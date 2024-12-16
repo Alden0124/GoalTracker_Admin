@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import ChatMessage from "../models/chatMessageModel.js";
 
+// 獲取聊天歷史紀錄
 export const getChatHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -62,6 +63,7 @@ export const getChatHistory = async (req, res) => {
   }
 };
 
+// 獲取對話列表
 export const getConversationsList = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -160,6 +162,64 @@ export const getConversationsList = async (req, res) => {
     res.status(500).json({
       message: "獲取對話列表失敗",
       error: error.message
+    });
+  }
+};
+
+// 更新訊息已讀狀態
+export const updateMessageReadStatus = async (req, res) => {
+  try {
+    const recipientId = req.user.userId; // 當前登入用戶（接收者）
+    const { senderId } = req.params; // 發送者ID
+
+    // 更新所有未讀訊息為已讀
+    await ChatMessage.updateMany(
+      {
+        sender: senderId,
+        recipient: recipientId,
+        read: false
+      },
+      {
+        $set: { read: true }
+      }
+    );
+
+    // 獲取更新後的未讀訊息數量
+    const unreadCount = await ChatMessage.countDocuments({
+      recipient: recipientId,
+      sender: senderId,
+      read: false
+    });
+
+    res.json({
+      success: true,
+      message: "訊息已標記為已讀",
+      unreadCount
+    });
+
+  } catch (error) {
+    console.error("更新訊息已讀狀態錯誤:", error);
+    res.status(500).json({
+      message: "更新訊息已讀狀態失敗",
+      error: error.message
+    });
+  }
+};
+
+// 獲取未讀訊息數量
+export const getUnreadMessageCount = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const count = await ChatMessage.countDocuments({
+      recipient: userId,
+      read: false,
+    });
+    res.json({ unreadMessageCount: count });
+  } catch (error) {
+    console.error("獲取未讀訊息數量錯誤:", error);
+    res.status(500).json({
+      message: "獲取未讀訊息數量失敗",
+      error: error.message,
     });
   }
 };

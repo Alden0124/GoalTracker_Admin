@@ -8,6 +8,9 @@ import { getNotificationContent } from "./notificationController.js";
 // 存儲在線用戶
 const onlineUsers = new Map();
 
+// 存儲用戶的活躍聊天室
+const activeChats = new Map();
+
 // 初始化 Socket.IO
 export const initializeSocketIO = (server) => {
   // 創建 Socket.IO 實例
@@ -71,6 +74,44 @@ const handleConnection = async (socket, io) => {
     console.error("獲取用戶信息錯誤:", error);
   }
 
+  // 監聽用戶進入聊天室
+  socket.on("enterChat", (data) => {
+    const { recipientId } = data;
+
+    // 如果用戶還沒有活躍聊天集合，創建一個新的
+    if (!activeChats.has(socket.userId)) {
+      activeChats.set(socket.userId, new Set());
+    }
+
+    // 添加新的聊天對象到集合中
+    activeChats.get(socket.userId).add(recipientId);
+    console.log(`用戶 ${socket.userId} 進入與 ${recipientId} 的聊天室`);
+  });
+
+  // 監聽用戶離開聊天室
+  // 監聽用戶離開聊天室
+  // 監聽用戶離開聊天室
+  socket.on("leaveChat", (data = {}) => {
+    const { recipientId } = data;
+
+    if (activeChats.has(socket.userId)) {
+      if (recipientId) {
+        // 離開特定聊天室
+        activeChats.get(socket.userId).delete(recipientId);
+        console.log(`用戶 ${socket.userId} 離開與 ${recipientId} 的聊天室`);
+      } else {
+        // 離開所有聊天室
+        activeChats.delete(socket.userId);
+        console.log(`用戶 ${socket.userId} 離開所有聊天室`);
+      }
+
+      // 如果還有活躍聊天集合但為空，則刪除
+      if (activeChats.get(socket.userId)?.size === 0) {
+        activeChats.delete(socket.userId);
+      }
+    }
+  });
+
   // 處理私人訊息
   socket.on("sendMessage", async (data) => {
     console.log("收到發送訊息請求:", data);
@@ -106,12 +147,9 @@ const handleSendMessage = async (socket, io, data) => {
     const { recipientId, content, timestamp } = data;
     const senderId = socket.userId;
 
-    console.log("處理發送訊息:", {
-      senderId,
-      recipientId,
-      content,
-      timestamp,
-    });
+    // 檢查接收者是否正在與發送者聊天
+    const recipientActiveChats = activeChats.get(recipientId);
+    const isRecipientActive = recipientActiveChats?.has(senderId);
 
     // 創建新訊息
     const message = await ChatMessage.create({
@@ -119,6 +157,7 @@ const handleSendMessage = async (socket, io, data) => {
       recipient: recipientId,
       content: content,
       createdAt: timestamp,
+      read: isRecipientActive, // 如果接收者在聊天室中，直接標記為已讀
     });
 
     // 獲取發送者信息 (增加 avatar 欄位)
@@ -219,7 +258,6 @@ export const sendNotification = async (io, notification) => {
       .populate("goal", "title")
       .populate("comment", "content");
 
-
     // 格式化通知數據
     const formattedNotification = {
       id: populatedNotification._id,
@@ -227,17 +265,18 @@ export const sendNotification = async (io, notification) => {
       sender: {
         id: populatedNotification.sender._id,
         username: populatedNotification.sender.username,
-        avatar: populatedNotification.sender.avatar
+        avatar: populatedNotification.sender.avatar,
       },
-      goal: populatedNotification.goal ? {
-        id: populatedNotification.goal._id,
-        title: populatedNotification.goal.title
-      } : null,
+      goal: populatedNotification.goal
+        ? {
+            id: populatedNotification.goal._id,
+            title: populatedNotification.goal.title,
+          }
+        : null,
       content: getNotificationContent(populatedNotification),
       read: populatedNotification.read,
-      createdAt: populatedNotification.createdAt
+      createdAt: populatedNotification.createdAt,
     };
-
 
     // 檢查接收者是否在線
     const recipientSocket = onlineUsers.get(notification.recipient.toString());
@@ -320,7 +359,7 @@ export const handleMarkNotificationRead = async (io, data) => {
 
     // 更新通知的 read 欄位為 true
     const notification = await Notification.findById(notificationId);
-    
+
     if (notification) {
       notification.read = true;
       await notification.save();
@@ -332,7 +371,9 @@ export const handleMarkNotificationRead = async (io, data) => {
       });
 
       // 檢查用戶是否在線
-      const recipientSocket = onlineUsers.get(notification.recipient.toString());
+      const recipientSocket = onlineUsers.get(
+        notification.recipient.toString()
+      );
       if (recipientSocket) {
         // 使用 io.to() 發送到特定用戶
         io.to(recipientSocket.socketId).emit("notificationUpdate", {
@@ -346,4 +387,3 @@ export const handleMarkNotificationRead = async (io, data) => {
     console.error("標記通知已讀錯誤:", error);
   }
 };
-    

@@ -13,14 +13,14 @@ export const getNotifications = async (req, res) => {
       .populate({
         path: "comment",
         populate: {
-          path: "parentId", // 添加這行來獲取父評論
+          path: "parentId",
           select: "content",
         },
       })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
-
+    console.log("notifications", notifications);
     // 格式化通知數據
     const formattedNotifications = notifications.map((notification) => ({
       id: notification._id,

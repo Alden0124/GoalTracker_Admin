@@ -4,7 +4,6 @@ import ChatMessage from "../models/chatMessageModel.js";
 import Notification from "../models/notificationModel.js";
 import User from "../models/userModel.js";
 import { getNotificationContent } from "./notificationController.js";
-
 // 存儲在線用戶
 const onlineUsers = new Map();
 
@@ -247,16 +246,27 @@ const handleGetHistory = async (socket, data) => {
 // 發送通知的函數
 export const sendNotification = async (io, notification) => {
   try {
+    // 檢查發送者和接收者是否為同一人
+    if (notification.sender.toString() === notification.recipient.toString()) {
+      console.log("跳過發送通知：發送者和接收者相同");
+      return null;
+    }
+
     // 創建通知記錄
     const newNotification = await Notification.create(notification);
-
     // 獲取完整的通知信息（包含關聯數據）
     const populatedNotification = await Notification.findById(
       newNotification._id
     )
       .populate("sender", "username avatar")
       .populate("goal", "title")
-      .populate("comment", "content");
+      .populate({
+        path: "comment",
+        populate: {
+          path: "parentId", // 添加這行來獲取父評論
+          select: "content",
+        },
+      });
 
     // 格式化通知數據
     const formattedNotification = {

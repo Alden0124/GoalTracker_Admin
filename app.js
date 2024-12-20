@@ -21,6 +21,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:10000",
   "https://goaltracker-frontend.onrender.com",
+  "https://d7ajzqdf255uu.cloudfront.net",
 ];
 
 app.use(
@@ -46,7 +47,11 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:", "http:"],
-        connectSrc: ["'self'", "https://goaltracker-frontend.onrender.com"],
+        connectSrc: [
+          "'self'",
+          "https://goaltracker-frontend.onrender.com",
+          "https://d7ajzqdf255uu.cloudfront.net",
+        ],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
       },

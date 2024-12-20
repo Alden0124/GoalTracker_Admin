@@ -1,0 +1,19 @@
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+# 安裝依賴
+COPY package*.json ./
+RUN npm install --production
+
+# 複製源代碼
+COPY . .
+
+# 設置生產環境
+ENV NODE_ENV=production
+
+# 暴露端口
+EXPOSE 8080
+
+# 啟動應用
+CMD ["npm", "run", "start:prod"] 

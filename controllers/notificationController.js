@@ -129,6 +129,9 @@ export const getNotificationContent = (notification) => {
       return `${notification.sender.username} 在你的目標「${notification.goal.title}」發表評論: ${commentData.content}`;
     }
     case "reply": {
+      if (!notification.comment) {
+        return "回覆已被刪除";
+      }
       const commentData = JSON.parse(notification.comment.content);
       const parentCommentData = JSON.parse(
         notification.comment.parentId.content
